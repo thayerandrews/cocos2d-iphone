@@ -28,6 +28,170 @@
 	return self;
 }
 
+-(void)setupStackEffectTest
+{
+    self.subTitle = @"";
+    
+    CCNodeColor *color = [CCNodeColor nodeWithColor:[CCColor whiteColor] width:1024 height:1024];
+    [self.contentNode addChild:color];
+
+    
+    CCEffectBlur* blurEffect1 = [CCEffectBlur effectWithBlurRadius:1.0f];
+    blurEffect1.padding = CGSizeMake(10.0f, 10.0f);
+
+    CCEffectBlur* blurEffect2 = [CCEffectBlur effectWithBlurRadius:1.0f];
+    blurEffect1.padding = CGSizeMake(10.0f, 10.0f);
+    
+    CCEffectSaturation *saturationEffect1 = [CCEffectSaturation effectWithSaturation:0.0f];
+    
+    CCEffectSaturation *saturationEffect2 = [CCEffectSaturation effectWithSaturation:0.0f];
+    
+    
+    CCSprite *sprite1 = [CCSprite spriteWithImageNamed:@"Images/sprite-diffuse.png"];
+    sprite1.anchorPoint = ccp(0.5, 0.5);
+    sprite1.position = ccp(0.25f, 0.5f);
+    sprite1.scale = 0.5f;
+    sprite1.positionType = CCPositionTypeNormalized;
+    sprite1.opacity = 0.0f;
+    sprite1.effect = saturationEffect1;
+    [self.contentNode addChild:sprite1];
+    
+    CCLabelTTF *label1 = [CCLabelTTF labelWithString:@"We create this..." fontName:@"SourceSansPro-Regular" fontSize:24 * [CCDirector sharedDirector].UIScaleFactor];
+    label1.color = [CCColor colorWithWhite:0.5f alpha:1.0f];
+    label1.positionType = CCPositionTypeNormalized;
+    label1.position = ccp(0.25f, 0.75f);
+    label1.horizontalAlignment = CCTextAlignmentCenter;
+    label1.opacity = 0.0f;
+    [self.contentNode addChild:label1];
+
+    CCSprite *sprite2 = [CCSprite spriteWithImageNamed:@"Images/sprite-diffuse.png"];
+    sprite2.anchorPoint = ccp(0.5, 0.5);
+    sprite2.position = ccp(0.5f, 0.5f);
+    sprite2.scale = 0.5f;
+    sprite2.positionType = CCPositionTypeNormalized;
+    sprite2.opacity = 0.0f;
+    sprite2.effect = blurEffect1;
+    [self.contentNode addChild:sprite2];
+
+    CCLabelTTF *label2 = [CCLabelTTF labelWithString:@"And this..." fontName:@"SourceSansPro-Regular" fontSize:24 * [CCDirector sharedDirector].UIScaleFactor];
+    label2.color = [CCColor colorWithWhite:0.5f alpha:1.0f];
+    label2.positionType = CCPositionTypeNormalized;
+    label2.position = ccp(0.5f, 0.75f);
+    label2.horizontalAlignment = CCTextAlignmentCenter;
+    label2.opacity = 0.0f;
+    [self.contentNode addChild:label2];
+
+    CCSprite *sprite3 = [CCSprite spriteWithImageNamed:@"Images/sprite-diffuse.png"];
+    sprite3.anchorPoint = ccp(0.5, 0.5);
+    sprite3.position = ccp(0.75f, 0.5f);
+    sprite3.scale = 0.5f;
+    sprite3.positionType = CCPositionTypeNormalized;
+    sprite3.opacity = 0.0f;
+    sprite3.effect = [CCEffectStack effectWithArray:@[blurEffect2, saturationEffect2]];
+    [self.contentNode addChild:sprite3];
+
+    CCLabelTTF *label3 = [CCLabelTTF labelWithString:@"But we get this for free." fontName:@"SourceSansPro-Regular" fontSize:24 * [CCDirector sharedDirector].UIScaleFactor];
+    label3.color = [CCColor colorWithWhite:0.5f alpha:1.0f];
+    label3.positionType = CCPositionTypeNormalized;
+    label3.position = ccp(0.77f, 0.75f);
+    label3.horizontalAlignment = CCTextAlignmentCenter;
+    label3.opacity = 0.0f;
+    [self.contentNode addChild:label3];
+
+    
+    const float step = 1.0f / 60.0f;
+    __block float time = 0.0f;
+    void (^updateBlock)() = ^{
+
+        const float SpriteFadeDuration = 0.25f;
+        const float AnimCycleSpeed     = 2.0f;
+        
+        const float Sprite1FadeStart   = 1.0f;
+        const float SaturateAnimStart  = 2.0f;
+        
+        const float Sprite2FadeStart   = 3.0f;
+        const float BlurAnimStart      = 4.0f;
+        
+        const float Sprite3FadeStart   = 5.0f;
+        const float StackAnimStart     = 6.0f;
+
+        // Fade sprites in
+        if ((time > Sprite1FadeStart) && (time < (Sprite1FadeStart + SpriteFadeDuration)))
+        {
+            float t = (time - Sprite1FadeStart) / SpriteFadeDuration;
+            sprite1.opacity = t;
+            label1.opacity = t;
+        }
+
+        if ((time > Sprite2FadeStart) && (time < (Sprite2FadeStart + SpriteFadeDuration)))
+        {
+            float t = (time - Sprite2FadeStart) / SpriteFadeDuration;
+            sprite2.opacity = t;
+            label2.opacity = t;
+        }
+
+        if ((time > Sprite3FadeStart) && (time < (Sprite3FadeStart + SpriteFadeDuration)))
+        {
+            float t = (time - Sprite3FadeStart) / SpriteFadeDuration;
+            sprite3.opacity = t;
+            label3.opacity = t;
+        }
+        
+
+        if (time > SaturateAnimStart)
+        {
+            float t = -0.5f * (cosf((time - SaturateAnimStart) * AnimCycleSpeed) - 1.0f);
+            saturationEffect1.saturation = t * -1.0f;
+        }
+
+        if (time > BlurAnimStart)
+        {
+            float t = -0.5f * (cosf((time - BlurAnimStart) * AnimCycleSpeed) - 1.0f);
+            blurEffect1.blurRadius = t * 16.0f;
+        }
+
+        if (time > StackAnimStart)
+        {
+            float t = -0.5f * (cosf((time - StackAnimStart) * AnimCycleSpeed) - 1.0f);
+            saturationEffect2.saturation = t * -1.0f;
+            blurEffect2.blurRadius = t * 16.0f;
+        }
+
+        
+//        else if (time < times[1])
+//        {
+//            float t = (time - times[0]) / (times[1] - times[0]);
+//            sprite2.opacity = t;
+//        }
+//        else if (time < times[2])
+//        {
+//            float t = (time - times[1]) / (times[2] - times[1]);
+//            blurEffect1.blurRadius = 1.0f + 9.0f * t;
+//        }
+//        else if (time < times[3])
+//        {
+//            float t = (time - times[2]) / (times[3] - times[2]);
+//            sprite3.opacity = t;
+//        }
+//        else if (time < times[4])
+//        {
+//            float t = (time - times[3]) / (times[4] - times[3]);
+//            saturationEffect2.saturation = -1.0f * t;
+//            blurEffect2.blurRadius = 1.0f + 9.0f * t;
+//        }
+        
+        time += step;
+    };
+    updateBlock();
+    
+    [sprite1 runAction:[CCActionRepeatForever actionWithAction:[CCActionSequence actions:
+                                                               [CCActionDelay actionWithDuration:step],
+                                                               [CCActionCallBlock actionWithBlock:updateBlock],
+                                                               nil
+                                                               ]]];
+}
+
+
 
 #if CC_EFFECTS_EXPERIMENTAL
 
