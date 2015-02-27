@@ -46,11 +46,23 @@
     
     CCEffectSaturation *saturationEffect2 = [CCEffectSaturation effectWithSaturation:0.0f];
     
+    const float labelOffset = 0.3f;
+    const float spriteScale = 0.6f;
+    
+    const CGPoint sprite1Pos = ccp(0.2f, 0.5f);
+    const CGPoint label1Pos = ccp(sprite1Pos.x, sprite1Pos.y + labelOffset);
+
+    const CGPoint sprite2Pos = ccp(0.5f, 0.5f);
+    const CGPoint label2Pos = ccp(sprite2Pos.x, sprite2Pos.y + labelOffset);
+
+    const CGPoint sprite3Pos = ccp(0.8f, 0.5f);
+    const CGPoint label3Pos = ccp(sprite3Pos.x + 0.02f, sprite3Pos.y + labelOffset);
+
     
     CCSprite *sprite1 = [CCSprite spriteWithImageNamed:@"Images/sprite-diffuse.png"];
     sprite1.anchorPoint = ccp(0.5, 0.5);
-    sprite1.position = ccp(0.25f, 0.5f);
-    sprite1.scale = 0.5f;
+    sprite1.position = sprite1Pos;
+    sprite1.scale = spriteScale;
     sprite1.positionType = CCPositionTypeNormalized;
     sprite1.opacity = 0.0f;
     sprite1.effect = saturationEffect1;
@@ -59,15 +71,15 @@
     CCLabelTTF *label1 = [CCLabelTTF labelWithString:@"We create this..." fontName:@"SourceSansPro-Regular" fontSize:24 * [CCDirector sharedDirector].UIScaleFactor];
     label1.color = [CCColor colorWithWhite:0.5f alpha:1.0f];
     label1.positionType = CCPositionTypeNormalized;
-    label1.position = ccp(0.25f, 0.75f);
+    label1.position = label1Pos;
     label1.horizontalAlignment = CCTextAlignmentCenter;
     label1.opacity = 0.0f;
     [self.contentNode addChild:label1];
 
     CCSprite *sprite2 = [CCSprite spriteWithImageNamed:@"Images/sprite-diffuse.png"];
     sprite2.anchorPoint = ccp(0.5, 0.5);
-    sprite2.position = ccp(0.5f, 0.5f);
-    sprite2.scale = 0.5f;
+    sprite2.position = sprite2Pos;
+    sprite2.scale = spriteScale;
     sprite2.positionType = CCPositionTypeNormalized;
     sprite2.opacity = 0.0f;
     sprite2.effect = blurEffect1;
@@ -76,15 +88,15 @@
     CCLabelTTF *label2 = [CCLabelTTF labelWithString:@"And this..." fontName:@"SourceSansPro-Regular" fontSize:24 * [CCDirector sharedDirector].UIScaleFactor];
     label2.color = [CCColor colorWithWhite:0.5f alpha:1.0f];
     label2.positionType = CCPositionTypeNormalized;
-    label2.position = ccp(0.5f, 0.75f);
+    label2.position = label2Pos;
     label2.horizontalAlignment = CCTextAlignmentCenter;
     label2.opacity = 0.0f;
     [self.contentNode addChild:label2];
 
     CCSprite *sprite3 = [CCSprite spriteWithImageNamed:@"Images/sprite-diffuse.png"];
     sprite3.anchorPoint = ccp(0.5, 0.5);
-    sprite3.position = ccp(0.75f, 0.5f);
-    sprite3.scale = 0.5f;
+    sprite3.position = sprite3Pos;
+    sprite3.scale = spriteScale;
     sprite3.positionType = CCPositionTypeNormalized;
     sprite3.opacity = 0.0f;
     sprite3.effect = [CCEffectStack effectWithArray:@[blurEffect2, saturationEffect2]];
@@ -93,7 +105,7 @@
     CCLabelTTF *label3 = [CCLabelTTF labelWithString:@"But we get this for free." fontName:@"SourceSansPro-Regular" fontSize:24 * [CCDirector sharedDirector].UIScaleFactor];
     label3.color = [CCColor colorWithWhite:0.5f alpha:1.0f];
     label3.positionType = CCPositionTypeNormalized;
-    label3.position = ccp(0.77f, 0.75f);
+    label3.position = label3Pos;
     label3.horizontalAlignment = CCTextAlignmentCenter;
     label3.opacity = 0.0f;
     [self.contentNode addChild:label3];
@@ -114,6 +126,8 @@
         
         const float Sprite3FadeStart   = 5.0f;
         const float StackAnimStart     = 6.0f;
+        
+        const float FadeOutStart       = 20.0f;
 
         // Fade sprites in
         if ((time > Sprite1FadeStart) && (time < (Sprite1FadeStart + SpriteFadeDuration)))
@@ -137,24 +151,48 @@
             label3.opacity = t;
         }
         
-
-        if (time > SaturateAnimStart)
+        
+        if (time < (FadeOutStart + SpriteFadeDuration))
         {
-            float t = -0.5f * (cosf((time - SaturateAnimStart) * AnimCycleSpeed) - 1.0f);
-            saturationEffect1.saturation = t * -1.0f;
+            if (time > SaturateAnimStart)
+            {
+                float t = -0.5f * (cosf((time - SaturateAnimStart) * AnimCycleSpeed) - 1.0f);
+                saturationEffect1.saturation = t * -1.0f;
+            }
+            
+            if (time > BlurAnimStart)
+            {
+                float t = -0.5f * (cosf((time - BlurAnimStart) * AnimCycleSpeed) - 1.0f);
+                blurEffect1.blurRadius = t * 15.0f + 1.0f;
+            }
+            
+            if (time > StackAnimStart)
+            {
+                float t = -0.5f * (cosf((time - StackAnimStart) * AnimCycleSpeed) - 1.0f);
+                saturationEffect2.saturation = t * -1.0f;
+                blurEffect2.blurRadius = t * 15.0f + 1.0f;
+            }
         }
-
-        if (time > BlurAnimStart)
+        
+        if ((time > FadeOutStart) && (time < FadeOutStart + SpriteFadeDuration))
         {
-            float t = -0.5f * (cosf((time - BlurAnimStart) * AnimCycleSpeed) - 1.0f);
-            blurEffect1.blurRadius = t * 16.0f;
+            float t = (time - FadeOutStart) / SpriteFadeDuration;
+            sprite1.opacity = 1.0f - t;
+            label1.opacity = 1.0f - t;
+
+            sprite2.opacity = 1.0f - t;
+            label2.opacity = 1.0f - t;
+
+            sprite3.opacity = 1.0f - t;
+            label3.opacity = 1.0f - t;
         }
-
-        if (time > StackAnimStart)
+        else if (time >= (FadeOutStart + SpriteFadeDuration))
         {
-            float t = -0.5f * (cosf((time - StackAnimStart) * AnimCycleSpeed) - 1.0f);
-            saturationEffect2.saturation = t * -1.0f;
-            blurEffect2.blurRadius = t * 16.0f;
+            saturationEffect1.saturation = 0.0f;
+            blurEffect1.blurRadius = 1.0f;
+            saturationEffect2.saturation = 0.0f;
+            blurEffect2.blurRadius = 1.0f;
+            time = 0.0f;
         }
 
         
