@@ -54,18 +54,16 @@
     return newFunction;
 }
 
--(NSString*)callStringWithInputs:(NSArray*)inputs
+-(NSString*)callStringWithInputMappings:(NSDictionary*)inputMappings
 {
     NSMutableString *callString = [[NSMutableString alloc] initWithFormat:@"%@(", _name];
-    for (NSString *input in inputs)
+    for (CCEffectFunctionInput *input in self.inputs)
     {
-        if ([inputs lastObject] != input)
+        NSString *mappedInput = inputMappings[input.name];
+        [callString appendFormat:@"%@", mappedInput];
+        if (input != [self.inputs lastObject])
         {
-            [callString appendFormat:@"%@, ", input];
-        }
-        else
-        {
-            [callString appendFormat:@"%@", input];
+            [callString appendFormat:@", "];
         }
     }
     [callString appendString:@")"];
@@ -74,6 +72,7 @@
 }
 
 @end
+
 
 #pragma mark CCEffectFunctionInput
 

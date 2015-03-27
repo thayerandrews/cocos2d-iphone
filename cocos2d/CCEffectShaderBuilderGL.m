@@ -149,12 +149,12 @@ static NSString* fragTemplate =
         if (!allocatedTemps[call.outputName])
         {
             // Generate the call string and assignment of the result to the temporary (with variable declaration).
-            [shaderString appendFormat:@"    %@ %@ = %@;\n", call.function.returnType, call.outputName, [call.function callStringWithInputs:[call.inputs allValues]]];
+            [shaderString appendFormat:@"    %@ %@ = %@;\n", call.function.returnType, call.outputName, [call.function callStringWithInputMappings:call.inputs]];
         }
         else
         {
             // Generate the call string and assignment of the result to the temporary.
-            [shaderString appendFormat:@"    %@ = %@;\n", call.outputName, [call.function callStringWithInputs:[call.inputs allValues]]];
+            [shaderString appendFormat:@"    %@ = %@;\n", call.outputName, [call.function callStringWithInputMappings:call.inputs]];
         }
         
         // Be sure to add the call's output variable to the allocated temporaries

@@ -34,7 +34,7 @@ typedef NS_ENUM(NSUInteger, CCEffectFunctionInitializer)
 -(id)initWithName:(NSString*)name body:(NSString*)body inputs:(NSArray*)inputs returnType:(NSString*)returnType;
 +(instancetype)functionWithName:(NSString*)name body:(NSString*)body inputs:(NSArray*)inputs returnType:(NSString*)returnType;
 
--(NSString*)callStringWithInputs:(NSArray*)inputs;
+-(NSString*)callStringWithInputMappings:(NSDictionary*)inputMappings;
 
 @end
 
