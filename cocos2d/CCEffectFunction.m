@@ -14,10 +14,12 @@
 
 -(id)initWithName:(NSString *)name body:(NSString*)body inputs:(NSArray*)inputs returnType:(NSString *)returnType
 {
+    NSAssert(name.length, @"");
+    NSAssert(body.length, @"");
+    NSAssert(returnType.length, @"");
+
     if((self = [super init]))
-    {
-        NSAssert(inputs.count <= 1, @"Effect functions currently only support 0 or 1 inputs.");
-        
+    {        
         _body = [body copy];
         _name = [name copy];
         _inputs = [inputs copy];
@@ -30,6 +32,10 @@
             for (CCEffectFunctionInput *input in _inputs)
             {
                 [tmpString appendFormat:@"%@ %@", input.type, input.name];
+                if (input != [_inputs lastObject])
+                {
+                    [tmpString appendString:@", "];
+                }
             }
             inputString = tmpString;
         }
@@ -50,6 +56,7 @@
 
 -(instancetype)copyWithZone:(NSZone *)zone
 {
+    // XXX CCEffectFunction is immutable. Just return self.
     CCEffectFunction *newFunction = [[CCEffectFunction allocWithZone:zone] initWithName:_name body:_body inputs:_inputs returnType:_returnType];
     return newFunction;
 }
@@ -80,6 +87,9 @@
 
 -(id)initWithType:(NSString*)type name:(NSString*)name
 {
+    NSAssert(type.length, @"");
+    NSAssert(name.length, @"");
+
     if((self = [super init]))
     {
         _type = [type copy];
@@ -105,8 +115,7 @@
 -(id)initWithFunction:(CCEffectFunction *)function outputName:(NSString *)outputName inputs:(NSDictionary *)inputs
 {
     NSAssert(function, @"");
-    NSAssert(outputName, @"");
-//    NSAssert(inputs, @"");
+    NSAssert(outputName.length, @"");
     
     if((self = [super init]))
     {
