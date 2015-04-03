@@ -11,10 +11,15 @@
 
 typedef NS_ENUM(NSUInteger, CCEffectFunctionInitializer)
 {
-    CCEffectInitFragColor                    = 0,
-    CCEffectInitMainTexture                  = 1,
-    CCEffectInitPreviousPass                 = 2,
+    // Vertex initializers
+    CCEffectInitVertexAttributes             = 0,
     
+    // Fragment initializers
+    CCEffectInitFragColor                    = 1,
+    CCEffectInitMainTexture                  = 2,
+    CCEffectInitPreviousPass                 = 3,
+    
+    // Reserved fragment initializers
     CCEffectInitReserveOffset                = 8,
     CCEffectInitReserved0                    = CCEffectInitFragColor    + CCEffectInitReserveOffset,
     CCEffectInitReserved1                    = CCEffectInitMainTexture  + CCEffectInitReserveOffset,
@@ -66,9 +71,13 @@ typedef NS_ENUM(NSUInteger, CCEffectFunctionInitializer)
 @property (nonatomic, readonly) NSString* type;
 @property (nonatomic, readonly) NSString* name;
 @property (nonatomic, readonly) CCEffectFunctionInitializer initializer;
+@property (nonatomic, readonly) BOOL isValidForVertexShader;
+@property (nonatomic, readonly) BOOL isValidForFragmentShader;
 
 -(id)initWithType:(NSString*)type name:(NSString*)name initializer:(CCEffectFunctionInitializer)initializer;
 +(instancetype)temporaryWithType:(NSString*)type name:(NSString*)name initializer:(CCEffectFunctionInitializer)initializer;
+
++(CCEffectFunctionInitializer)promoteInitializer:(CCEffectFunctionInitializer)initializer;
 
 @end
 

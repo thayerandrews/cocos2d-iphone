@@ -388,7 +388,7 @@ static NSString * const CCEffectStitcherVaryings = @"CCEffectStitcherVaryings";
         {
             // If this stitch group is not first in the stack, we need to adjust each temporary's name _and_ adjust
             // its initializer to make sure cc_FragColor doesn't contribute to the initializer expression again.
-            temporaryReplacements[prefixedName] = [CCEffectFunctionTemporary temporaryWithType:temporary.type name:prefixedName initializer:temporary.initializer + CCEffectInitReserveOffset];
+            temporaryReplacements[prefixedName] = [CCEffectFunctionTemporary temporaryWithType:temporary.type name:prefixedName initializer:[CCEffectFunctionTemporary promoteInitializer:temporary.initializer]];
         }
     }
     return [temporaryReplacements copy];

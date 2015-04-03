@@ -130,6 +130,7 @@
 {
     NSAssert(type.length, @"");
     NSAssert(name.length, @"");
+    NSAssert(initializer != CCEffectInitReserveOffset, @"");
     
     if((self = [super init]))
     {
@@ -150,6 +151,47 @@
     NSAssert(0, @"Subclasses must override this.");
     return nil;
 }
+
+-(BOOL)isValidForVertexShader
+{
+    switch (self.initializer)
+    {
+        case CCEffectInitVertexAttributes:
+            return YES;
+            break;
+        default:
+            return NO;
+            break;
+    }
+}
+
+-(BOOL)isValidForFragmentShader
+{
+    switch (self.initializer)
+    {
+        case CCEffectInitFragColor:
+        case CCEffectInitMainTexture:
+        case CCEffectInitPreviousPass:
+        case CCEffectInitReserved0:
+        case CCEffectInitReserved1:
+        case CCEffectInitReserved2:
+            return YES;
+            break;
+        default:
+            return NO;
+            break;
+    }
+}
+
++(CCEffectFunctionInitializer)promoteInitializer:(CCEffectFunctionInitializer)initializer
+{
+    if (initializer != CCEffectInitVertexAttributes)
+    {
+        initializer += CCEffectInitReserveOffset;
+    }
+    return initializer;
+}
+
 
 @end
 
@@ -180,6 +222,9 @@
     {
         switch (self.initializer)
         {
+            case CCEffectInitVertexAttributes:
+                _cachedDeclaration = [NSString stringWithFormat:@"%@ %@ = cc_Position", self.type, self.name];
+                break;
             case CCEffectInitFragColor:
                 _cachedDeclaration = [NSString stringWithFormat:@"%@ %@ = cc_FragColor", self.type, self.name];
                 break;
@@ -201,6 +246,9 @@
             case CCEffectInitReserved2:
                 _cachedDeclaration = [NSString stringWithFormat:@"vec2 compare_%@ = cc_FragTexCoord1Extents - abs(cc_FragTexCoord1 - cc_FragTexCoord1Center);\n"
                                       @"%@ %@ = texture2D(cc_PreviousPassTexture, cc_FragTexCoord1) * step(0.0, min(compare_%@.x, compare_%@.y))", self.name, self.type, self.name, self.name, self.name];
+                break;
+            case CCEffectInitReserveOffset:
+                NSAssert(0, @"");
                 break;
         }
     }
