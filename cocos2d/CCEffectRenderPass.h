@@ -36,7 +36,6 @@ typedef NS_ENUM(NSUInteger, CCEffectTexCoordMapping)
 @property (nonatomic, assign) GLKVector2 texCoord2Extents;
 @property (nonatomic, strong) NSMutableDictionary* shaderUniforms;
 @property (nonatomic, strong) NSDictionary* uniformTranslationTable;
-@property (nonatomic, assign) BOOL needsClear;
 
 @end
 

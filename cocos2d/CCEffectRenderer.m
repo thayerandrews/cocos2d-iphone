@@ -9,6 +9,7 @@
 #import "ccUtils.h"
 
 #import "CCEffectRenderer.h"
+#import "CCColor.h"
 #import "CCDeviceInfo.h"
 #import "CCDirector.h"
 #import "CCEffect.h"
@@ -19,6 +20,7 @@
 #import "CCTexture.h"
 #import "CCImage.h"
 
+#import "CCDirector_Private.h"
 #import "CCEffect_Private.h"
 #import "CCRenderer_Private.h"
 #import "CCSprite_Private.h"
@@ -59,103 +61,6 @@ static GLKVector2 transformTexCoords(CCEffectTexCoordTransform tcTransform, GLKV
 static GLKVector2 selectTexCoordSource(CCEffectTexCoordSource tcSource, GLKVector2 tc1, GLKVector2 tc2, GLKVector2 tcConst);
 static GLKVector2 selectTexCoordPadding(CCEffectTexCoordSource tcSource, GLKVector2 tc1Padding, GLKVector2 tc2Padding);
 
-
-@interface CCEffectRenderTarget : NSObject
-
-@property (nonatomic, readonly) CCTexture *texture;
-@property (nonatomic, readonly) GLuint FBO;
-@property (nonatomic, readonly) GLuint depthRenderBuffer;
-@property (nonatomic, readonly) BOOL glResourcesAllocated;
-
-@end
-
-@implementation CCEffectRenderTarget
-
-- (id)init
-{
-    if((self = [super init]))
-    {
-    }
-    return self;
-}
-
-- (void)dealloc
-{
-    if (self.glResourcesAllocated)
-    {
-        [self destroyGLResources];
-    }
-}
-
-- (BOOL)setupGLResourcesWithSize:(CGSize)size
-{
-    NSAssert(!_glResourcesAllocated, @"");
-    
-    CCGL_DEBUG_PUSH_GROUP_MARKER("CCEffectRenderTarget: allocateRenderTarget");
-    
-	// Textures may need to be a power of two
-	NSUInteger powW;
-	NSUInteger powH;
-    
-	if( [[CCDeviceInfo sharedDeviceInfo] supportsNPOT] )
-    {
-		powW = size.width;
-		powH = size.height;
-	}
-    else
-    {
-		powW = CCNextPOT(size.width);
-		powH = CCNextPOT(size.height);
-	}
-    
-    CGFloat contentScale = [CCDirector currentDirector].contentScaleFactor;
-    CCImage *image = [[CCImage alloc] initWithPixelSize:CGSizeMake(powW, powH) contentScale:contentScale pixelData:nil];
-    image.contentSize = CC_SIZE_SCALE(size, 1.0/contentScale);
-    
-    // Create a new texture object for use as the color attachment of the new
-    // FBO.
-    _texture = [[CCTexture alloc] initWithImage:image options:nil];
-	
-    // Save the old FBO binding so it can be restored after we create the new
-    // one.
-	GLint oldFBO;
-	glGetIntegerv(GL_FRAMEBUFFER_BINDING, &oldFBO);
-    
-	// Generate a new FBO and bind it so it can be modified.
-	glGenFramebuffers(1, &_FBO);
-	glBindFramebuffer(GL_FRAMEBUFFER, _FBO);
-    
-	// Associate texture with FBO
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, [(CCTextureGL *)_texture name], 0);
-    
-	// Check if it worked (probably worth doing :) )
-	NSAssert( glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, @"Could not attach texture to framebuffer");
-    
-    // Restore the old FBO binding.
-	glBindFramebuffer(GL_FRAMEBUFFER, oldFBO);
-	
-	CC_CHECK_GL_ERROR_DEBUG();
-	CCGL_DEBUG_POP_GROUP_MARKER();
-    
-    _glResourcesAllocated = YES;
-    return YES;
-}
-
-- (void)destroyGLResources
-{
-    NSAssert(_glResourcesAllocated, @"");
-    glDeleteFramebuffers(1, &_FBO);
-    if (_depthRenderBuffer)
-    {
-        glDeleteRenderbuffers(1, &_depthRenderBuffer);
-    }
-    
-    _texture = nil;
-    
-    _glResourcesAllocated = NO;
-}
-
-@end
 
 
 @interface CCEffectRenderer ()
@@ -238,7 +143,7 @@ static GLKVector2 selectTexCoordPadding(CCEffectTexCoordSource tcSource, GLKVect
     renderPassInputs.sprite = sprite;
 
     BOOL padMainTexCoords = YES;
-    CCEffectRenderTarget *previousPassRT = nil;
+    CCFrameBufferObject *previousPassRT = nil;
     for(NSUInteger i = 0; i < (effectPassCount + extraPassCount); i++)
     {
         renderPassInputs.renderPassId = i;
@@ -301,14 +206,14 @@ static GLKVector2 selectTexCoordPadding(CCEffectTexCoordSource tcSource, GLKVect
         renderPassInputs.texCoord2Center = GLKVector2Make((sprite.vertexes->tr.texCoord2.s + sprite.vertexes->bl.texCoord2.s) * 0.5f, (sprite.vertexes->tr.texCoord2.t + sprite.vertexes->bl.texCoord2.t) * 0.5f);
         renderPassInputs.texCoord2Extents = GLKVector2Make(fabsf(sprite.vertexes->tr.texCoord2.s - sprite.vertexes->bl.texCoord2.s) * 0.5f, fabsf(sprite.vertexes->tr.texCoord2.t - sprite.vertexes->bl.texCoord2.t) * 0.5f);
 
-        renderPassInputs.needsClear = !toFramebuffer;
         renderPassInputs.shaderUniforms = uniforms;
         
-        CCEffectRenderTarget *rt = nil;
+        CCFrameBufferObject *rt = nil;
         
         [renderer pushGroup];
         if (toFramebuffer)
         {
+            renderPassInputs.renderer = renderer;
             renderPassInputs.transform = *transform;
             renderPassInputs.ndcToNodeLocal = GLKMatrix4Invert(*transform, nil);
             
@@ -331,11 +236,30 @@ static GLKVector2 selectTexCoordPadding(CCEffectTexCoordSource tcSource, GLKVect
             rtSize.height = (rtSize.height <= 1.0f) ? 1.0f : rtSize.height;
             
             rt = [self renderTargetWithSize:rtSize];
-            
+
+            // Get a new renderer and associate it with the render target.
+            CCRenderer *passRenderer = [[CCDirector currentDirector] rendererFromPool];
+            [passRenderer prepareWithProjection:&renderTargetProjection framebuffer:rt];
+            [CCRenderer bindRenderer:passRenderer];
+            [passRenderer enqueueClear:GL_COLOR_BUFFER_BIT color:[CCColor clearColor].glkVector4 depth:0.0f stencil:0 globalSortOrder:NSIntegerMin];
+
+            // Execute the render pass with the new renderer.
+            renderPassInputs.renderer = passRenderer;
             [renderPass begin:renderPassInputs];
-            [self bindRenderTarget:rt withRenderer:renderer];
             [renderPass update:renderPassInputs];
-            [self restoreRenderTargetWithRenderer:renderer];
+     
+            // Flush the renderer and, when the frame is done, return it to the pool.
+            __unsafe_unretained CCDirector *director = [CCDirector currentDirector];
+            CCRenderDispatch(passRenderer.threadsafe, ^{
+                [director addFrameCompletionHandler:^{
+                    // Return the renderer to the pool when the frame completes.
+                    [director poolRenderer:passRenderer];
+                }];
+                [passRenderer flush];
+            });
+            
+            // Restore the previous renderer.
+            [CCRenderer bindRenderer:renderer];
         }
         [renderer popGroupWithDebugLabel:renderPass.debugLabel globalSortOrder:0];
         
@@ -343,37 +267,13 @@ static GLKVector2 selectTexCoordPadding(CCEffectTexCoordSource tcSource, GLKVect
     }
 }
 
-- (void)bindRenderTarget:(CCEffectRenderTarget *)rt withRenderer:(CCRenderer *)renderer
-{
-    CGSize pixelSize = CC_SIZE_SCALE(rt.texture.contentSize, rt.texture.contentScale);
-    GLuint fbo = rt.FBO;
-    
-    [renderer enqueueBlock:^{
-        glGetFloatv(GL_VIEWPORT, _oldViewport.v);
-        glViewport(0, 0, pixelSize.width, pixelSize.height );
-        
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &_oldFBO);
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        
-    } globalSortOrder:NSIntegerMin debugLabel:@"CCEffectRenderer: Bind FBO" threadSafe:NO];
-}
-
-- (void)restoreRenderTargetWithRenderer:(CCRenderer *)renderer
-{
-    [renderer enqueueBlock:^{
-        glBindFramebuffer(GL_FRAMEBUFFER, _oldFBO);
-        glViewport(_oldViewport.v[0], _oldViewport.v[1], _oldViewport.v[2], _oldViewport.v[3]);
-    } globalSortOrder:NSIntegerMax debugLabel:@"CCEffectRenderer: Restore FBO" threadSafe:NO];
-    
-}
-
-- (CCEffectRenderTarget *)renderTargetWithSize:(CGSize)size
+- (CCFrameBufferObject *)renderTargetWithSize:(CGSize)size
 {
     NSAssert((size.width > 0.0f) && (size.height > 0.0f), @"Render targets must have non-zero dimensions.");
 
     // If there is a free render target available for use, return that one. If
     // not, create a new one and return that.
-    CCEffectRenderTarget *rt = nil;
+    CCFrameBufferObject *rt = nil;
     if (_freeRenderTargets.count)
     {
         rt = [_freeRenderTargets lastObject];
@@ -381,8 +281,25 @@ static GLKVector2 selectTexCoordPadding(CCEffectTexCoordSource tcSource, GLKVect
     }
     else
     {
-        rt = [[CCEffectRenderTarget alloc] init];
-        [rt setupGLResourcesWithSize:size];
+        // Textures may need to be a power of two
+        NSUInteger powW = size.width;
+        NSUInteger powH = size.height;
+        if(![[CCDeviceInfo sharedDeviceInfo] supportsNPOT])
+        {
+            powW = CCNextPOT(size.width);
+            powH = CCNextPOT(size.height);
+        }
+        
+        CGFloat contentScale = [CCDirector currentDirector].contentScaleFactor;
+        CCImage *image = [[CCImage alloc] initWithPixelSize:CGSizeMake(powW, powH) contentScale:contentScale pixelData:nil];
+        image.contentSize = CC_SIZE_SCALE(size, 1.0/contentScale);
+        
+        // Create a new texture object for use as the color attachment of the new
+        // FBO.
+        CCTexture *texture = [[CCTexture alloc] initWithImage:image options:nil rendertexture:YES];
+        CCFrameBufferObject *fbo = [[CCFrameBufferObjectClass alloc] initWithTexture:texture depthStencilFormat:0];
+
+        rt = fbo;
         [_allRenderTargets addObject:rt];
     }
     return rt;
@@ -390,16 +307,14 @@ static GLKVector2 selectTexCoordPadding(CCEffectTexCoordSource tcSource, GLKVect
 
 - (void)destroyAllRenderTargets
 {
-    // Destroy all allocated render target objects and the associated GL resources.
-    for (CCEffectRenderTarget *rt in _allRenderTargets)
-    {
-        [rt destroyGLResources];
-    }
+    // Clear out the render target lists. The framebuffer objects will no longer
+    // be referenced, their dealloc methods will be called, and the associated
+    // GL resources will be cleaned up.
     [_allRenderTargets removeAllObjects];
     [_freeRenderTargets removeAllObjects];
 }
 
-- (void)freeRenderTarget:(CCEffectRenderTarget *)rt
+- (void)freeRenderTarget:(CCFrameBufferObject *)rt
 {
     // Put the supplied render target back into the free list. If it's already there
     // them somebody is doing something wrong.
