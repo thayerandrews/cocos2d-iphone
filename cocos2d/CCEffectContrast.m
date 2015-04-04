@@ -7,8 +7,10 @@
 //
 
 #import "CCEffectContrast.h"
+#import "CCDeviceInfo.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
+#import "CCEffectShaderBuilderMetal.h"
 #import "CCEffect_Private.h"
 #import "CCRenderer.h"
 #import "CCTexture.h"
@@ -19,6 +21,8 @@ static float conditionContrast(float contrast);
 @property (nonatomic, strong) NSNumber *conditionedContrast;
 @end
 
+
+#pragma mark - CCEffectContrastImplGL
 
 @interface CCEffectContrastImplGL : CCEffectImpl
 @property (nonatomic, weak) CCEffectContrast *interface;
@@ -101,6 +105,101 @@ static float conditionContrast(float contrast);
 @end
 
 
+#pragma mark - CCEffectContrastImplMetal
+
+@interface CCEffectContrastImplMetal : CCEffectImpl
+@property (nonatomic, weak) CCEffectContrast *interface;
+@end
+
+
+@implementation CCEffectContrastImplMetal
+
+-(id)initWithInterface:(CCEffectContrast *)interface
+{
+    NSArray *renderPasses = [CCEffectContrastImplMetal buildRenderPassesWithInterface:interface];
+    NSArray *shaders = [CCEffectContrastImplMetal buildShaders];
+    
+    if((self = [super initWithRenderPasses:renderPasses shaders:shaders]))
+    {
+        self.interface = interface;
+        self.debugName = @"CCEffectContrastImplMetal";
+    }
+    return self;
+}
+
++ (NSArray *)buildShaders
+{
+    return @[[[CCEffectShader alloc] initWithVertexShaderBuilder:[CCEffectShaderBuilderMetal defaultVertexShaderBuilder] fragmentShaderBuilder:[CCEffectContrastImplMetal fragShaderBuilder]]];
+}
+
++ (CCEffectShaderBuilder *)fragShaderBuilder
+{
+    NSArray *functions = [CCEffectContrastImplMetal buildFragmentFunctions];
+    NSArray *temporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"half4" name:@"tmp" initializer:CCEffectInitPreviousPass]];
+    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[0] outputName:@"contrastAdjusted" inputs:@{@"contrast" : @"contrast",
+                                                                                                                           @"inputValue" : @"tmp"}]];
+    NSArray *arguments = @[
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device float&" name:@"contrast" qualifier:CCEffectShaderArgumentBuffer]
+                           ];
+    
+    return [[CCEffectShaderBuilderMetal alloc] initWithType:CCEffectShaderBuilderFragment
+                                                  functions:functions
+                                                      calls:calls
+                                                temporaries:temporaries
+                                                  arguments:[[CCEffectShaderBuilderMetal defaultFragmentArguments] arrayByAddingObjectsFromArray:arguments]
+                                                    structs:[CCEffectShaderBuilderMetal defaultStructDeclarations]];
+}
+
++ (NSArray *)buildFragmentFunctions
+{
+    NSString* effectBody = CC_GLSL(
+                                   half3 offset = half3(0.5) * inputValue.a;
+                                   return half4(((inputValue.rgb - offset) * half3(contrast) + offset), inputValue.a);
+                                   );
+    
+    NSArray *inputs = @[
+                        [[CCEffectFunctionInput alloc] initWithType:@"half4" name:@"inputValue"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device float&" name:@"contrast"],
+                        ];
+    CCEffectFunction* fragmentFunction = [[CCEffectFunction alloc] initWithName:@"contrastEffect"
+                                                                           body:effectBody
+                                                                         inputs:inputs
+                                                                     returnType:@"half4"];
+    
+    return @[fragmentFunction];
+
+}
+
++ (NSArray *)buildRenderPassesWithInterface:(CCEffectContrast *)interface
+{
+    __weak CCEffectContrast *weakInterface = interface;
+    
+    CCEffectRenderPass *pass0 = [[CCEffectRenderPass alloc] init];
+    pass0.debugLabel = @"CCEffectContrast pass 0";
+    pass0.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+                
+        passInputs.shaderUniforms[CCShaderUniformMainTexture] = passInputs.previousPassTexture;
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = passInputs.texCoord1Center;
+        tcDims.texCoord1Extents = passInputs.texCoord1Extents;
+        tcDims.texCoord2Center = passInputs.texCoord2Center;
+        tcDims.texCoord2Extents = passInputs.texCoord2Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+        
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"contrast"]] = weakInterface.conditionedContrast;
+
+    }]];
+    
+    return @[pass0];
+}
+
+@end
+
+
+#pragma mark - CCEffectContrast
+
 @implementation CCEffectContrast
 
 -(id)init
@@ -115,7 +214,15 @@ static float conditionContrast(float contrast);
         _contrast = contrast;
         _conditionedContrast = [NSNumber numberWithFloat:conditionContrast(contrast)];
 
-        self.effectImpl = [[CCEffectContrastImplGL alloc] initWithInterface:self];
+        if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            self.effectImpl = [[CCEffectContrastImplMetal alloc] initWithInterface:self];
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectContrastImplGL alloc] initWithInterface:self];
+        }
+        
         self.debugName = @"CCEffectContrast";
     }
     return self;

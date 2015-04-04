@@ -7,8 +7,10 @@
 
 
 #import "CCEffectHue.h"
+#import "CCDeviceInfo.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
+#import "CCEffectShaderBuilderMetal.h"
 #import "CCEffect_Private.h"
 #import "CCRenderer.h"
 #import "CCTexture.h"
@@ -21,6 +23,8 @@ static GLKMatrix4 matrixWithHue(float hue);
 @property (nonatomic, strong) NSValue *hueRotationMtx;
 @end
 
+
+#pragma mark - CCEffectHueImplGL
 
 @interface CCEffectHueImplGL : CCEffectImpl
 @property (nonatomic, weak) CCEffectHue *interface;
@@ -102,6 +106,98 @@ static GLKMatrix4 matrixWithHue(float hue);
 @end
 
 
+#pragma mark - CCEffectHueImplMetal
+
+@interface CCEffectHueImplMetal : CCEffectImpl
+@property (nonatomic, weak) CCEffectHue *interface;
+@end
+
+@implementation CCEffectHueImplMetal
+
+
+-(id)initWithInterface:(CCEffectHue *)interface
+{
+    NSArray *renderPasses = [CCEffectHueImplMetal buildRenderPassesWithInterface:interface];
+    NSArray *shaders = [CCEffectHueImplMetal buildShaders];
+    
+    if((self = [super initWithRenderPasses:renderPasses shaders:shaders]))
+    {
+        self.interface = interface;
+        self.debugName = @"CCEffectHueImplMetal";
+    }
+    return self;
+}
+
++ (NSArray *)buildShaders
+{
+    return @[[[CCEffectShader alloc] initWithVertexShaderBuilder:[CCEffectShaderBuilderMetal defaultVertexShaderBuilder] fragmentShaderBuilder:[CCEffectHueImplMetal fragShaderBuilder]]];
+}
+
++ (CCEffectShaderBuilder *)fragShaderBuilder
+{
+    NSArray *functions = [CCEffectHueImplMetal buildFragmentFunctions];
+    NSArray *temporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"half4" name:@"tmp" initializer:CCEffectInitPreviousPass]];
+    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[0] outputName:@"hueShifted" inputs:@{@"hueRotationMtx" : @"hueRotationMtx",
+                                                                                                                     @"inputValue" : @"tmp"}]];
+    NSArray *arguments = @[
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device float4x4&" name:@"hueRotationMtx" qualifier:CCEffectShaderArgumentBuffer]
+                           ];
+    
+    return [[CCEffectShaderBuilderMetal alloc] initWithType:CCEffectShaderBuilderFragment
+                                                  functions:functions
+                                                      calls:calls
+                                                temporaries:temporaries
+                                                  arguments:[[CCEffectShaderBuilderMetal defaultFragmentArguments] arrayByAddingObjectsFromArray:arguments]
+                                                    structs:[CCEffectShaderBuilderMetal defaultStructDeclarations]];
+}
+
++ (NSArray *)buildFragmentFunctions
+{
+    NSString* effectBody = CC_GLSL(
+                                   return (half4)(hueRotationMtx * (float4)inputValue);
+                                   );
+    
+    NSArray *inputs = @[
+                        [[CCEffectFunctionInput alloc] initWithType:@"half4" name:@"inputValue"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device float4x4&" name:@"hueRotationMtx"],
+                        ];
+    CCEffectFunction* fragmentFunction = [[CCEffectFunction alloc] initWithName:@"hueEffect"
+                                                                           body:effectBody
+                                                                         inputs:inputs
+                                                                     returnType:@"half4"];
+    
+    return @[fragmentFunction];
+}
+
+
++ (NSArray *)buildRenderPassesWithInterface:(CCEffectHue *)interface
+{
+    __weak CCEffectHue *weakInterface = interface;
+    
+    CCEffectRenderPass *pass0 = [[CCEffectRenderPass alloc] init];
+    pass0.debugLabel = @"CCEffectHue pass 0";
+    pass0.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+        
+        passInputs.shaderUniforms[CCShaderUniformMainTexture] = passInputs.previousPassTexture;
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = passInputs.texCoord1Center;
+        tcDims.texCoord1Extents = passInputs.texCoord1Extents;
+        tcDims.texCoord2Center = passInputs.texCoord2Center;
+        tcDims.texCoord2Extents = passInputs.texCoord2Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"hueRotationMtx"]] = weakInterface.hueRotationMtx;
+    }]];
+    
+    return @[pass0];
+}
+
+@end
+
+
+#pragma mark - CCEffectHue
 
 @implementation CCEffectHue
 
@@ -114,7 +210,14 @@ static GLKMatrix4 matrixWithHue(float hue);
 {
     if((self = [super init]))
     {
-        self.effectImpl = [[CCEffectHueImplGL alloc] initWithInterface:self];
+        if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            self.effectImpl = [[CCEffectHueImplMetal alloc] initWithInterface:self];
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectHueImplGL alloc] initWithInterface:self];
+        }
         self.debugName = @"CCEffectHue";
 
         self.hue = hue;

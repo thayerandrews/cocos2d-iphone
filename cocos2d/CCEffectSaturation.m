@@ -41,8 +41,10 @@
 
 
 #import "CCEffectSaturation.h"
+#import "CCDeviceInfo.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
+#import "CCEffectShaderBuilderMetal.h"
 #import "CCEffect_Private.h"
 #import "CCRenderer.h"
 #import "CCTexture.h"
@@ -55,6 +57,8 @@ static float conditionSaturation(float saturation);
 @property (nonatomic, strong) NSNumber *conditionedSaturation;
 @end
 
+
+#pragma mark - CCEffectSaturationImplGL
 
 @interface CCEffectSaturationImplGL : CCEffectImpl
 @property (nonatomic, weak) CCEffectSaturation *interface;
@@ -142,6 +146,106 @@ static float conditionSaturation(float saturation);
 @end
 
 
+
+#pragma mark - CCEffectSaturationImplMetal
+
+@interface CCEffectSaturationImplMetal : CCEffectImpl
+@property (nonatomic, weak) CCEffectSaturation *interface;
+@end
+
+
+@implementation CCEffectSaturationImplMetal
+
+-(id)initWithInterface:(CCEffectSaturation *)interface
+{
+    NSArray *renderPasses = [CCEffectSaturationImplMetal buildRenderPassesWithInterface:interface];
+    NSArray *shaders = [CCEffectSaturationImplMetal buildShaders];
+    
+    if((self = [super initWithRenderPasses:renderPasses shaders:shaders]))
+    {
+        self.interface = interface;
+        self.debugName = @"CCEffectSaturationImplMetal";
+    }
+    return self;
+}
+
++ (NSArray *)buildShaders
+{
+    return @[[[CCEffectShader alloc] initWithVertexShaderBuilder:[CCEffectShaderBuilderMetal defaultVertexShaderBuilder] fragmentShaderBuilder:[CCEffectSaturationImplMetal fragShaderBuilder]]];
+}
+
++ (CCEffectShaderBuilder *)fragShaderBuilder
+{
+    NSArray *functions = [CCEffectSaturationImplMetal buildFragmentFunctions];
+    NSArray *temporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"half4" name:@"tmp" initializer:CCEffectInitPreviousPass]];
+    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[0] outputName:@"saturationAdjusted" inputs:@{@"saturation" : @"saturation",
+                                                                                                                             @"inputValue" : @"tmp"}]];
+    NSArray *arguments = @[
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device float&" name:@"saturation" qualifier:CCEffectShaderArgumentBuffer]
+                           ];
+    
+    return [[CCEffectShaderBuilderMetal alloc] initWithType:CCEffectShaderBuilderFragment
+                                                  functions:functions
+                                                      calls:calls
+                                                temporaries:temporaries
+                                                  arguments:[[CCEffectShaderBuilderMetal defaultFragmentArguments] arrayByAddingObjectsFromArray:arguments]
+                                                    structs:[CCEffectShaderBuilderMetal defaultStructDeclarations]];
+}
+
++ (NSArray *)buildFragmentFunctions
+{
+    NSString* effectBody = CC_GLSL(
+                                   const half3 luminanceWeighting = half3(0.2125, 0.7154, 0.0721);
+                                   
+                                   float luminance = dot(inputValue.rgb, luminanceWeighting);
+                                   half3 greyScaleColor = half3(luminance);
+                                   
+                                   return half4(mix(greyScaleColor, inputValue.rgb, (half)saturation), inputValue.a);
+                                   );
+    
+    NSArray *inputs = @[
+                        [[CCEffectFunctionInput alloc] initWithType:@"half4" name:@"inputValue"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device float&" name:@"saturation"],
+                        ];
+    CCEffectFunction* fragmentFunction = [[CCEffectFunction alloc] initWithName:@"saturationEffect"
+                                                                           body:effectBody
+                                                                         inputs:inputs
+                                                                     returnType:@"half4"];
+    
+    return @[fragmentFunction];
+    
+}
+
++ (NSArray *)buildRenderPassesWithInterface:(CCEffectSaturation *)interface
+{
+    __weak CCEffectSaturation *weakInterface = interface;
+    
+    CCEffectRenderPass *pass0 = [[CCEffectRenderPass alloc] init];
+    pass0.debugLabel = @"CCEffectSaturation pass 0";
+    pass0.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+        
+        passInputs.shaderUniforms[CCShaderUniformMainTexture] = passInputs.previousPassTexture;
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = passInputs.texCoord1Center;
+        tcDims.texCoord1Extents = passInputs.texCoord1Extents;
+        tcDims.texCoord2Center = passInputs.texCoord2Center;
+        tcDims.texCoord2Extents = passInputs.texCoord2Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+        
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"saturation"]] = weakInterface.conditionedSaturation;
+        
+    }]];
+    
+    return @[pass0];
+}
+
+@end
+
+
+#pragma mark - CCEffectSaturation
+
 @implementation CCEffectSaturation
 
 -(id)init
@@ -156,7 +260,14 @@ static float conditionSaturation(float saturation);
         _saturation = saturation;
         _conditionedSaturation = [NSNumber numberWithFloat:conditionSaturation(saturation)];
 
-        self.effectImpl = [[CCEffectSaturationImplGL alloc] initWithInterface:self];
+        if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            self.effectImpl = [[CCEffectSaturationImplMetal alloc] initWithInterface:self];
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectSaturationImplGL alloc] initWithInterface:self];
+        }
         self.debugName = @"CCEffectSaturation";
     }
     return self;

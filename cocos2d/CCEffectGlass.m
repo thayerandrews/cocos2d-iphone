@@ -7,8 +7,10 @@
 //
 
 #import "CCEffectGlass.h"
+#import "CCDeviceInfo.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
+#import "CCEffectShaderBuilderMetal.h"
 
 #import "CCDirector.h"
 #import "CCEffectUtils.h"
@@ -303,6 +305,344 @@ static const float CCEffectGlassDefaultFresnelPower = 2.0f;
 @end
 
 
+#pragma mark - CCEffectGlassImplMetal
+
+typedef struct CCEffectGlassParameters
+{
+    float shininess;
+    float fresnelBias;
+    float fresnelPower;
+    float refraction;
+    GLKVector2 reflectTangent;
+    GLKVector2 reflectBinormal;
+    GLKVector2 refractTangent;
+    GLKVector2 refractBinormal;
+    GLKMatrix4 ndcToReflectEnv;
+    GLKMatrix4 ndcToRefractEnv;
+} CCEffectGlassParameters;
+
+
+@interface CCEffectGlassImplMetal : CCEffectImpl
+@property (nonatomic, weak) CCEffectGlass *interface;
+@end
+
+@implementation CCEffectGlassImplMetal
+
+-(id)initWithInterface:(CCEffectGlass *)interface
+{
+    NSArray *renderPasses = [CCEffectGlassImplMetal buildRenderPassesWithInterface:interface];
+    NSArray *shaders = [CCEffectGlassImplMetal buildShaders];
+    
+    if((self = [super initWithRenderPasses:renderPasses shaders:shaders]))
+    {
+        self.interface = interface;
+        self.debugName = @"CCEffectGlassImplMetal";
+        self.stitchFlags = CCEffectFunctionStitchAfter;
+    }
+    return self;
+}
+
++ (NSArray *)buildStructDeclarations
+{
+    NSString* structGlassFragData =
+    @"float4 position [[position]];\n"
+    @"float2 texCoord1;\n"
+    @"float2 texCoord2;\n"
+    @"half4  color;\n"
+    @"float2 reflectEnvSpaceTexCoords;\n"
+    @"float2 refractEnvSpaceTexCoords;\n";
+    
+    NSString* structGlassParams =
+    @"float shininess;\n"
+    @"float fresnelBias;\n"
+    @"float fresnelPower;\n"
+    @"float refraction;\n"
+    @"float2 reflectTangent;\n"
+    @"float2 reflectBinormal;\n"
+    @"float2 refractTangent;\n"
+    @"float2 refractBinormal;\n"
+    @"float4x4 ndcToReflectEnv;\n"
+    @"float4x4 ndcToRefractEnv;\n";
+    
+    return @[
+             [[CCEffectShaderStructDeclaration alloc] initWithName:@"CCEffectGlassFragData" body:structGlassFragData],
+             [[CCEffectShaderStructDeclaration alloc] initWithName:@"CCEffectGlassParameters" body:structGlassParams]
+             ];
+}
+
++ (NSArray *)buildShaders
+{
+    return @[[[CCEffectShader alloc] initWithVertexShaderBuilder:[CCEffectGlassImplMetal vertexShaderBuilder] fragmentShaderBuilder:[CCEffectGlassImplMetal fragShaderBuilder]]];
+}
+
++ (CCEffectShaderBuilder *)fragShaderBuilder
+{
+    NSArray *functions = [CCEffectGlassImplMetal buildFragmentFunctions];
+    NSArray *temporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"half4" name:@"tmp" initializer:CCEffectInitPreviousPass]];
+    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[0] outputName:@"glassResult" inputs:@{@"cc_FragIn" : @"cc_FragIn",
+                                                                                                                      @"cc_NormalMapTexture" : @"cc_NormalMapTexture",
+                                                                                                                      @"cc_NormalMapTextureSampler" : @"cc_NormalMapTextureSampler",
+                                                                                                                      @"refractEnvMapTexture" : @"refractEnvMapTexture",
+                                                                                                                      @"refractEnvMapTextureSampler" : @"refractEnvMapTextureSampler",
+                                                                                                                      @"reflectEnvMapTexture" : @"reflectEnvMapTexture",
+                                                                                                                      @"reflectEnvMapTextureSampler" : @"reflectEnvMapTextureSampler",
+                                                                                                                      @"cc_FragTexCoordDimensions" : @"cc_FragTexCoordDimensions",
+                                                                                                                      @"glassParams" : @"glassParams",
+                                                                                                                      @"inputValue" : @"tmp"
+                                                                                                                      }]];
+    
+    
+    NSArray *arguments = @[
+                           [[CCEffectShaderArgument alloc] initWithType:@"const CCEffectGlassFragData" name:CCShaderArgumentFragIn qualifier:CCEffectShaderArgumentStageIn],
+                           [[CCEffectShaderArgument alloc] initWithType:@"texture2d<half>" name:CCShaderUniformPreviousPassTexture qualifier:CCEffectShaderArgumentTexture],
+                           [[CCEffectShaderArgument alloc] initWithType:@"sampler" name:CCShaderUniformPreviousPassTextureSampler qualifier:CCEffectShaderArgumentSampler],
+                           [[CCEffectShaderArgument alloc] initWithType:@"texture2d<half>" name:CCShaderUniformNormalMapTexture qualifier:CCEffectShaderArgumentTexture],
+                           [[CCEffectShaderArgument alloc] initWithType:@"sampler" name:CCShaderUniformNormalMapTextureSampler qualifier:CCEffectShaderArgumentSampler],
+                           [[CCEffectShaderArgument alloc] initWithType:@"texture2d<half>" name:@"reflectEnvMapTexture" qualifier:CCEffectShaderArgumentTexture],
+                           [[CCEffectShaderArgument alloc] initWithType:@"sampler" name:@"reflectEnvMapTextureSampler" qualifier:CCEffectShaderArgumentSampler],
+                           [[CCEffectShaderArgument alloc] initWithType:@"texture2d<half>" name:@"refractEnvMapTexture" qualifier:CCEffectShaderArgumentTexture],
+                           [[CCEffectShaderArgument alloc] initWithType:@"sampler" name:@"refractEnvMapTextureSampler" qualifier:CCEffectShaderArgumentSampler],
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device CCEffectTexCoordDimensions*" name:CCShaderArgumentTexCoordDimensions qualifier:CCEffectShaderArgumentBuffer],
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device CCEffectGlassParameters*" name:@"glassParams" qualifier:CCEffectShaderArgumentBuffer]
+                           ];
+    
+    NSArray *structs = [CCEffectGlassImplMetal buildStructDeclarations];
+    
+    return [[CCEffectShaderBuilderMetal alloc] initWithType:CCEffectShaderBuilderFragment
+                                                  functions:functions
+                                                      calls:calls
+                                                temporaries:temporaries
+                                                  arguments:arguments
+                                                    structs:[[CCEffectShaderBuilderMetal defaultStructDeclarations] arrayByAddingObjectsFromArray:structs]];
+}
+
++ (NSArray *)buildFragmentFunctions
+{
+    NSArray *inputs = @[
+                        [[CCEffectFunctionInput alloc] initWithType:@"const CCEffectGlassFragData" name:CCShaderArgumentFragIn],
+                        [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:CCShaderUniformNormalMapTexture],
+                        [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:CCShaderUniformNormalMapTextureSampler],
+                        [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:@"reflectEnvMapTexture"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:@"reflectEnvMapTextureSampler"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:@"refractEnvMapTexture"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:@"refractEnvMapTextureSampler"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device CCEffectTexCoordDimensions*" name:CCShaderArgumentTexCoordDimensions],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device CCEffectGlassParameters*" name:@"glassParams"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"half4" name:@"inputValue"]
+                        ];
+    
+    NSString* effectBody = CC_GLSL(
+                                   const float EPSILON = 0.000001;
+                                   
+                                   // Index the normal map and expand the color value from [0..1] to [-1..1]
+                                   half4 normalMap = cc_NormalMapTexture.sample(cc_NormalMapTextureSampler, cc_FragIn.texCoord2);
+                                   float4 tangentSpaceNormal = (float4)normalMap * 2.0 - 1.0;
+                                   
+                                   
+                                   // Convert the normal vector from tangent space to environment space
+                                   float3 refractNormal = normalize(float3(glassParams->refractTangent * tangentSpaceNormal.x + glassParams->refractBinormal * tangentSpaceNormal.y, tangentSpaceNormal.z));
+                                   float2 refractOffset = refract(float3(0,0,1), refractNormal, 1.0).xy * glassParams->refraction;
+                                   
+                                   // Perturb the screen space texture coordinate by the scaled normal
+                                   // vector.
+                                   float2 refractTexCoords = cc_FragIn.refractEnvSpaceTexCoords + refractOffset;
+                                   
+                                   // This is positive if refractTexCoords is in [0..1] and negative otherwise.
+                                   float2 compare = 0.5 - abs(refractTexCoords - 0.5);
+                                   
+                                   // This is 1.0 if both refracted texture coords are in bounds and 0.0 otherwise.
+                                   float inBounds = step(0.0, min(compare.x, compare.y));
+                                   
+                                   
+                                   
+                                   // Convert the normal vector from tangent space to environment space
+                                   float3 reflectNormal = normalize(float3(glassParams->reflectTangent * tangentSpaceNormal.x + glassParams->reflectBinormal * tangentSpaceNormal.y, tangentSpaceNormal.z));
+                                   
+                                   float nDotV = dot(reflectNormal, float3(0,0,1));
+                                   float2 reflectOffset = reflectNormal.xy * pow(1.0 - nDotV, 3.0) / 8.0;
+                                   
+                                   // Perturb the screen space texture coordinate by the scaled normal
+                                   // vector.
+                                   float2 reflectTexCoords = cc_FragIn.reflectEnvSpaceTexCoords + reflectOffset;
+                                   
+                                   // Feed the resulting coordinates through cos() so they reflect when
+                                   // they would otherwise be outside of [0..1].
+                                   const float M_PI = 3.14159265358979323846264338327950288;
+                                   reflectTexCoords.x = (1.0 - cos(reflectTexCoords.x * M_PI)) * 0.5;
+                                   reflectTexCoords.y = (1.0 - cos(reflectTexCoords.y * M_PI)) * 0.5;
+                                   
+                                   
+                                   
+                                   // Compute the combination of the sprite's color and texture.
+                                   half4 primaryColor = inputValue;
+                                   
+                                   // If the refracted texture coordinates are within the bounds of the environment map
+                                   // blend the primary color with the refracted environment. Multiplying by the normal
+                                   // map alpha also allows the effect to be disabled for specific pixels.
+                                   half4 refraction = normalMap.a * inBounds * refractEnvMapTexture.sample(refractEnvMapTextureSampler, refractTexCoords) * (1.0 - primaryColor.a);
+
+                                   // Compute Schlick's approximation (http://en.wikipedia.org/wiki/Schlick's_approximation) of the
+                                   // fresnel reflectance.
+                                   float fresnel = clamp(glassParams->fresnelBias + (1.0 - glassParams->fresnelBias) * pow(max((1.0 - nDotV), EPSILON), glassParams->fresnelPower), 0.0, 1.0);
+                                   
+                                   // Apply a cutoff to nDotV to reduce the aliasing that occurs in the reflected
+                                   // image. As the surface normal approaches a 90 degree angle relative to the viewing
+                                   // direction, the sampling of the reflection map becomes more and more compressed
+                                   // which can lead to undesirable aliasing artifacts. The cutoff threshold reduces
+                                   // the contribution of these pixels to the final image and hides this aliasing.
+                                   const float NDOTV_CUTOFF = 0.2;
+                                   fresnel *= smoothstep(0.0, NDOTV_CUTOFF, nDotV);
+                                   
+                                   // Add the reflected color modulated by the fresnel term. Multiplying by the normal
+                                   // map alpha also allows the effect to be disabled for specific pixels.
+                                   half4 reflection = normalMap.a * fresnel * glassParams->shininess * reflectEnvMapTexture.sample(reflectEnvMapTextureSampler, reflectTexCoords);
+                                   
+                                   return primaryColor + refraction + reflection;
+                                   );
+    
+    return @[[[CCEffectFunction alloc] initWithName:@"glassEffectFrag" body:effectBody inputs:inputs returnType:@"half4"]];
+}
+
++ (CCEffectShaderBuilder *)vertexShaderBuilder
+{
+    NSArray *functions = [CCEffectGlassImplMetal buildVertexFunctions];
+    NSArray *temporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"CCEffectGlassFragData" name:@"tmp" initializer:CCEffectInitVertexAttributes]];
+    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[0] outputName:@"glassResult" inputs:@{@"fragData" : @"tmp",
+                                                                                                                      @"glassParams" : @"glassParams" }]];
+    
+    NSArray *arguments = @[
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device CCVertex*" name:CCShaderArgumentVertexAtttributes qualifier:CCEffectShaderArgumentBuffer],
+                           [[CCEffectShaderArgument alloc] initWithType:@"unsigned int" name:CCShaderArgumentVertexId qualifier:CCEffectShaderArgumentVertexId],
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device CCEffectGlassParameters*" name:@"glassParams" qualifier:CCEffectShaderArgumentBuffer]
+                           ];
+    
+    NSArray *structs = [CCEffectGlassImplMetal buildStructDeclarations];
+    
+    return [[CCEffectShaderBuilderMetal alloc] initWithType:CCEffectShaderBuilderVertex
+                                                  functions:functions
+                                                      calls:calls
+                                                temporaries:temporaries
+                                                  arguments:arguments
+                                                    structs:[[CCEffectShaderBuilderMetal defaultStructDeclarations] arrayByAddingObjectsFromArray:structs]];
+}
+
++ (NSArray *)buildVertexFunctions
+{
+    
+    NSArray *inputs = @[
+                        [[CCEffectFunctionInput alloc] initWithType:@"CCEffectGlassFragData" name:@"fragData"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device CCEffectGlassParameters*" name:@"glassParams"]
+                        ];
+    
+    NSString* body = CC_GLSL(
+                             // Compute environment space texture coordinates from the vertex positions.
+                             
+                             // Reflect space coords
+                             float4 reflectEnvSpaceTexCoords = glassParams->ndcToReflectEnv * fragData.position;
+                             fragData.reflectEnvSpaceTexCoords = reflectEnvSpaceTexCoords.xy;
+
+                             // Refract space coords
+                             float4 refractEnvSpaceTexCoords = glassParams->ndcToRefractEnv * fragData.position;
+                             fragData.refractEnvSpaceTexCoords = refractEnvSpaceTexCoords.xy;
+                             
+                             return fragData;
+                             );
+    
+    return @[[[CCEffectFunction alloc] initWithName:@"glassEffectVtx" body:body inputs:inputs returnType:@"CCEffectGlassFragData"]];
+}
+
++ (NSArray *)buildRenderPassesWithInterface:(CCEffectGlass *)interface
+{
+    __weak CCEffectGlass *weakInterface = interface;
+    
+    CCEffectRenderPass *pass0 = [[CCEffectRenderPass alloc] init];
+    pass0.debugLabel = @"CCEffectGlass pass 0";
+    pass0.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+        
+        passInputs.shaderUniforms[CCShaderUniformMainTexture] = passInputs.previousPassTexture;
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = passInputs.texCoord1Center;
+        tcDims.texCoord1Extents = passInputs.texCoord1Extents;
+        tcDims.texCoord2Center = passInputs.texCoord2Center;
+        tcDims.texCoord2Extents = passInputs.texCoord2Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+        
+        if (weakInterface.normalMap)
+        {
+            passInputs.shaderUniforms[CCShaderUniformNormalMapTexture] = weakInterface.normalMap.texture;
+            
+            CCSpriteTexCoordSet texCoords = [CCSprite textureCoordsForTexture:weakInterface.normalMap.texture withRect:weakInterface.normalMap.rect rotated:weakInterface.normalMap.rotated xFlipped:NO yFlipped:NO];
+            CCSpriteVertexes verts = passInputs.verts;
+            verts.bl.texCoord2 = texCoords.bl;
+            verts.br.texCoord2 = texCoords.br;
+            verts.tr.texCoord2 = texCoords.tr;
+            verts.tl.texCoord2 = texCoords.tl;
+            passInputs.verts = verts;
+        }
+        
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"refractEnvMapTexture"]] = weakInterface.refractionEnvironment.texture ?: [CCTexture none];
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"reflectEnvMapTexture"]] = weakInterface.reflectionEnvironment.texture ?: [CCTexture none];
+        
+        // Get the transform from the affected node's local coordinates to the environment node.
+        GLKMatrix4 effectNodeToRefractEnvNode = weakInterface.refractionEnvironment ? CCEffectUtilsTransformFromNodeToNode(passInputs.sprite, weakInterface.refractionEnvironment, nil) : GLKMatrix4Identity;
+        
+        // Concatenate the node to environment transform with the environment node to environment texture transform.
+        // The result takes us from the affected node's coordinates to the environment's texture coordinates. We need
+        // this when computing the tangent and normal vectors below.
+        GLKMatrix4 effectNodeToRefractEnvTexture = GLKMatrix4Multiply(weakInterface.refractionEnvironment.nodeToTextureTransform, effectNodeToRefractEnvNode);
+        
+        // Concatenate the node to environment texture transform together with the transform from NDC to local node
+        // coordinates. (NDC == normalized device coordinates == render target coordinates that are normalized to the
+        // range 0..1). The shader uses this to map from NDC directly to environment texture coordinates.
+        GLKMatrix4 ndcToRefractEnvTexture = GLKMatrix4Multiply(effectNodeToRefractEnvTexture, passInputs.ndcToNodeLocal);
+        
+        // Setup the tangent and binormal vectors for the refraction environment
+        GLKVector4 refractTangent = GLKVector4Normalize(GLKMatrix4MultiplyVector4(effectNodeToRefractEnvTexture, GLKVector4Make(1.0f, 0.0f, 0.0f, 0.0f)));
+        GLKVector4 refractNormal = GLKVector4Make(0.0f, 0.0f, 1.0f, 1.0f);
+        GLKVector4 refractBinormal = GLKVector4CrossProduct(refractNormal, refractTangent);
+        
+        
+        // Get the transform from the affected node's local coordinates to the environment node.
+        GLKMatrix4 effectNodeToReflectEnvNode = weakInterface.reflectionEnvironment ? CCEffectUtilsTransformFromNodeToNode(passInputs.sprite, weakInterface.reflectionEnvironment, nil) : GLKMatrix4Identity;
+        
+        // Concatenate the node to environment transform with the environment node to environment texture transform.
+        // The result takes us from the affected node's coordinates to the environment's texture coordinates. We need
+        // this when computing the tangent and normal vectors below.
+        GLKMatrix4 effectNodeToReflectEnvTexture = GLKMatrix4Multiply(weakInterface.reflectionEnvironment.nodeToTextureTransform, effectNodeToReflectEnvNode);
+        
+        // Concatenate the node to environment texture transform together with the transform from NDC to local node
+        // coordinates. (NDC == normalized device coordinates == render target coordinates that are normalized to the
+        // range 0..1). The shader uses this to map from NDC directly to environment texture coordinates.
+        GLKMatrix4 ndcToReflectEnvTexture = GLKMatrix4Multiply(effectNodeToReflectEnvTexture, passInputs.ndcToNodeLocal);
+        
+        // Setup the tangent and binormal vectors for the reflection environment
+        GLKVector4 reflectTangent = GLKVector4Normalize(GLKMatrix4MultiplyVector4(effectNodeToReflectEnvTexture, GLKVector4Make(1.0f, 0.0f, 0.0f, 0.0f)));
+        GLKVector4 reflectNormal = GLKVector4Make(0.0f, 0.0f, 1.0f, 1.0f);
+        GLKVector4 reflectBinormal = GLKVector4CrossProduct(reflectNormal, reflectTangent);
+        
+        CCEffectGlassParameters parameters;
+        parameters.shininess = weakInterface.conditionedShininess;
+        parameters.fresnelBias = weakInterface.conditionedFresnelBias;
+        parameters.fresnelPower = weakInterface.conditionedFresnelPower;
+        parameters.refraction = weakInterface.conditionedRefraction;
+        parameters.ndcToReflectEnv = ndcToReflectEnvTexture;
+        parameters.reflectTangent = GLKVector2Make(reflectTangent.x, reflectTangent.y);
+        parameters.reflectBinormal = GLKVector2Make(reflectBinormal.x, reflectBinormal.y);
+        parameters.ndcToRefractEnv = ndcToRefractEnvTexture;
+        parameters.refractTangent = GLKVector2Make(refractTangent.x, refractTangent.y);
+        parameters.refractBinormal = GLKVector2Make(refractBinormal.x, refractBinormal.y);
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"glassParams"]] = [NSValue valueWithBytes:&parameters objCType:@encode(CCEffectGlassParameters)];
+    }]];
+    
+    return @[pass0];
+}
+
+@end
+
+
+#pragma mark - CCEffectGlass
 
 @implementation CCEffectGlass
 
@@ -333,7 +673,15 @@ static const float CCEffectGlassDefaultFresnelPower = 2.0f;
         _conditionedFresnelBias = CCEffectUtilsConditionFresnelBias(_fresnelBias);
         _conditionedFresnelPower = CCEffectUtilsConditionFresnelPower(_fresnelPower);
 
-        self.effectImpl = [[CCEffectGlassImplGL alloc] initWithInterface:self];
+        if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            self.effectImpl = [[CCEffectGlassImplMetal alloc] initWithInterface:self];
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectGlassImplGL alloc] initWithInterface:self];
+        }
+        
         self.debugName = @"CCEffectGlass";
     }
     return self;

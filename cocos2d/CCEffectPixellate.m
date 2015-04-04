@@ -41,8 +41,10 @@
 
 
 #import "CCEffectPixellate.h"
+#import "CCDeviceInfo.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
+#import "CCEffectShaderBuilderMetal.h"
 #import "CCEffect_Private.h"
 #import "CCRenderer.h"
 #import "CCTexture.h"
@@ -53,6 +55,9 @@ static float conditionBlockSize(float blockSize);
 @interface CCEffectPixellate ()
 @property (nonatomic, assign) float conditionedBlockSize;
 @end
+
+
+#pragma mark - CCEffectPixellateImplGL
 
 @interface CCEffectPixellateImplGL : CCEffectImpl
 @property (nonatomic, weak) CCEffectPixellate *interface;
@@ -143,6 +148,116 @@ static float conditionBlockSize(float blockSize);
 @end
 
 
+#pragma mark - CCEffectPixellateImplMetal
+
+@interface CCEffectPixellateImplMetal : CCEffectImpl
+@property (nonatomic, weak) CCEffectPixellate *interface;
+@end
+
+@implementation CCEffectPixellateImplMetal
+
+
+-(id)initWithInterface:(CCEffectPixellate *)interface
+{
+    NSArray *renderPasses = [CCEffectPixellateImplMetal buildRenderPassesWithInterface:interface];
+    NSArray *shaders = [CCEffectPixellateImplMetal buildShaders];
+    
+    if((self = [super initWithRenderPasses:renderPasses shaders:shaders]))
+    {
+        self.interface = interface;
+        self.debugName = @"CCEffectPixellateImplMetal";
+        self.stitchFlags = CCEffectFunctionStitchAfter;
+    }
+    return self;
+}
+
++ (NSArray *)buildShaders
+{
+    return @[[[CCEffectShader alloc] initWithVertexShaderBuilder:[CCEffectShaderBuilderMetal defaultVertexShaderBuilder] fragmentShaderBuilder:[CCEffectPixellateImplMetal fragShaderBuilder]]];
+}
+
++ (CCEffectShaderBuilder *)fragShaderBuilder
+{
+    NSArray *functions = [CCEffectPixellateImplMetal buildFragmentFunctions];
+    NSArray *temporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"half4" name:@"tmp" initializer:CCEffectInitFragColor]];
+    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[0] outputName:@"pixellated" inputs:@{@"cc_FragIn" : @"cc_FragIn",
+                                                                                                                      @"cc_PreviousPassTexture" : @"cc_PreviousPassTexture",
+                                                                                                                      @"cc_PreviousPassTextureSampler" : @"cc_PreviousPassTextureSampler",
+                                                                                                                      @"cc_FragTexCoordDimensions" : @"cc_FragTexCoordDimensions",
+                                                                                                                      @"uvStep" : @"uvStep",
+                                                                                                                      @"inputValue" : @"tmp"
+                                                                                                                      }]];
+
+    NSArray *arguments = @[
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device float2&" name:@"uvStep" qualifier:CCEffectShaderArgumentBuffer]
+                           ];
+    
+    return [[CCEffectShaderBuilderMetal alloc] initWithType:CCEffectShaderBuilderFragment
+                                                  functions:functions
+                                                      calls:calls
+                                                temporaries:temporaries
+                                                  arguments:[[CCEffectShaderBuilderMetal defaultFragmentArguments] arrayByAddingObjectsFromArray:arguments]
+                                                    structs:[CCEffectShaderBuilderMetal defaultStructDeclarations]];
+}
+
++ (NSArray *)buildFragmentFunctions
+{
+    NSString* effectBody = CC_GLSL(
+                                   float2 samplePos = cc_FragIn.texCoord1 - fmod(cc_FragIn.texCoord1, uvStep) + 0.5 * uvStep;
+                                   return inputValue * cc_PreviousPassTexture.sample(cc_PreviousPassTextureSampler, samplePos);
+                                   );
+    
+    NSArray *inputs = @[
+                        [[CCEffectFunctionInput alloc] initWithType:@"const CCFragData" name:CCShaderArgumentFragIn],
+                        [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:CCShaderUniformPreviousPassTexture],
+                        [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:CCShaderUniformPreviousPassTextureSampler],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device CCEffectTexCoordDimensions*" name:CCShaderArgumentTexCoordDimensions],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device float2&" name:@"uvStep"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"half4" name:@"inputValue"]
+                        ];
+
+    CCEffectFunction* fragmentFunction = [[CCEffectFunction alloc] initWithName:@"pixellateEffect"
+                                                                           body:effectBody
+                                                                         inputs:inputs
+                                                                     returnType:@"half4"];
+    
+    return @[fragmentFunction];
+}
+
+
++ (NSArray *)buildRenderPassesWithInterface:(CCEffectPixellate *)interface
+{
+    __weak CCEffectPixellate *weakInterface = interface;
+    
+    CCEffectRenderPass *pass0 = [[CCEffectRenderPass alloc] init];
+    pass0.debugLabel = @"CCEffectPixellate pass 0";
+    pass0.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+        
+        passInputs.shaderUniforms[CCShaderUniformMainTexture] = passInputs.previousPassTexture;
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = passInputs.texCoord1Center;
+        tcDims.texCoord1Extents = passInputs.texCoord1Extents;
+        tcDims.texCoord2Center = passInputs.texCoord2Center;
+        tcDims.texCoord2Extents = passInputs.texCoord2Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+        
+        float aspect = passInputs.previousPassTexture.contentSize.width / passInputs.previousPassTexture.contentSize.height;
+        float uStep = weakInterface.conditionedBlockSize / passInputs.previousPassTexture.contentSize.width;
+        float vStep = uStep * aspect;
+        
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"uvStep"]] = [NSValue valueWithGLKVector2:GLKVector2Make(uStep, vStep)];
+    }]];
+    
+    return @[pass0];
+}
+
+@end
+
+
+#pragma mark - CCEffectPixellate
+
 @implementation CCEffectPixellate
 
 -(id)init
@@ -157,7 +272,14 @@ static float conditionBlockSize(float blockSize);
         _blockSize = blockSize;
         _conditionedBlockSize = conditionBlockSize(blockSize);
 
-        self.effectImpl = [[CCEffectPixellateImplGL alloc] initWithInterface:self];
+        if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            self.effectImpl = [[CCEffectPixellateImplMetal alloc] initWithInterface:self];
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectPixellateImplGL alloc] initWithInterface:self];
+        }
         self.debugName = @"CCEffectPixellate";
     }
     return self;
