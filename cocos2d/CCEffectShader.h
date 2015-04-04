@@ -16,6 +16,7 @@
 @property (nonatomic, readonly) CCEffectShaderBuilder *vertexShaderBuilder;
 @property (nonatomic, readonly) CCEffectShaderBuilder *fragmentShaderBuilder;
 @property (nonatomic, readonly) CCShader *shader;
+@property (nonatomic, readonly) NSDictionary *parameters;
 
 - (id)initWithVertexShaderBuilder:(CCEffectShaderBuilder *)vtxBuilder fragmentShaderBuilder:(CCEffectShaderBuilder *)fragBuilder;
 

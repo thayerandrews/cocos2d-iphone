@@ -7,7 +7,9 @@
 //
 
 #import "CCEffectStitcher.h"
+#import "CCDeviceInfo.h"
 #import "CCEffectStitcherGL.h"
+#import "CCEffectStitcherMetal.h"
 
 
 @implementation CCEffectStitcher
@@ -19,7 +21,14 @@
 
 + (instancetype)stitcherWithEffects:(NSArray *)effects manglePrefix:(NSString *)prefix stitchListIndex:(NSUInteger)stitchListIndex shaderStartIndex:(NSUInteger)shaderStartIndex
 {
-    return [[CCEffectStitcherGL alloc] initWithEffects:effects manglePrefix:prefix stitchListIndex:stitchListIndex shaderStartIndex:shaderStartIndex];
+    if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+    {
+        return [[CCEffectStitcherMetal alloc] initWithEffects:effects manglePrefix:prefix stitchListIndex:stitchListIndex shaderStartIndex:shaderStartIndex];
+    }
+    else
+    {
+        return [[CCEffectStitcherGL alloc] initWithEffects:effects manglePrefix:prefix stitchListIndex:stitchListIndex shaderStartIndex:shaderStartIndex];
+    }
 }
 
 

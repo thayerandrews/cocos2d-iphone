@@ -15,12 +15,23 @@
 
 
 extern NSString * const CCShaderUniformPreviousPassTexture;
+extern NSString * const CCShaderUniformPreviousPassTextureSampler;
 extern NSString * const CCShaderUniformTexCoord1Center;
 extern NSString * const CCShaderUniformTexCoord1Extents;
 extern NSString * const CCShaderUniformTexCoord2Center;
 extern NSString * const CCShaderUniformTexCoord2Extents;
-extern NSString * const CCEffectDefaultInitialInputSnippet;
-extern NSString * const CCEffectDefaultInputSnippet;
+
+extern NSString * const CCShaderArgumentVertexId;
+extern NSString * const CCShaderArgumentVertexAtttributes;
+extern NSString * const CCShaderArgumentTexCoordDimensions;
+extern NSString * const CCShaderArgumentFragIn;
+
+typedef struct CCEffectTexCoordDimensions {
+    GLKVector2 texCoord1Center;
+    GLKVector2 texCoord1Extents;
+    GLKVector2 texCoord2Center;
+    GLKVector2 texCoord2Extents;
+} CCEffectTexCoordDimensions;
 
 
 typedef NS_ENUM(NSUInteger, CCEffectPrepareStatus)
@@ -75,7 +86,7 @@ typedef NS_ENUM(NSUInteger, CCEffectFunctionStitchFlags)
 @property (nonatomic, readonly) BOOL supportsDirectRendering;
 
 @property (nonatomic, readonly) NSArray* shaders;
-@property (nonatomic, readonly) NSMutableDictionary* shaderUniforms;
+@property (nonatomic, readonly) NSMutableDictionary* shaderParameters;
 
 @property (nonatomic, readonly) NSArray* renderPasses;
 @property (nonatomic, assign) CCEffectFunctionStitchFlags stitchFlags;

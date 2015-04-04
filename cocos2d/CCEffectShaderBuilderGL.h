@@ -10,6 +10,7 @@
 
 @interface CCEffectShaderBuilderGL : CCEffectShaderBuilder
 
+@property (nonatomic, readonly) NSArray* uniforms;
 @property (nonatomic, readonly) NSArray* varyings;
 
 - (id)initWithType:(CCEffectShaderBuilderType)type functions:(NSArray *)functions calls:(NSArray *)calls temporaries:(NSArray *)temporaries uniforms:(NSArray *)uniforms varyings:(NSArray *)varyings;

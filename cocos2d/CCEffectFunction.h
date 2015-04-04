@@ -88,3 +88,10 @@ typedef NS_ENUM(NSUInteger, CCEffectFunctionInitializer)
 
 @end
 
+
+@interface CCEffectFunctionTemporaryMetal : CCEffectFunctionTemporary
+
+-(id)initWithType:(NSString*)type name:(NSString*)name initializer:(CCEffectFunctionInitializer)initializer;
+
+@end
+

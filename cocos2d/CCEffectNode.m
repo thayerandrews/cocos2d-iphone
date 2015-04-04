@@ -169,15 +169,13 @@
 
 - (void)updateShaderUniformsFromEffect
 {
-    // Initialize the shader uniforms dictionary with the node's main texture and an
-    // empty entry for the normal map (because effect node's don't have normal maps
-    // like sprites do).
-    _shaderUniforms = [@{ CCShaderUniformMainTexture : (_texture ?: [CCTexture none]),
-                          CCShaderUniformNormalMapTexture : [CCTexture none]
-                          } mutableCopy];
+    // Initialize the shader uniforms dictionary with the effect's parameters.
+    _shaderUniforms = [_effect.effectImpl.shaderParameters mutableCopy];
     
-    // And then copy the new effect's uniforms into the node's uniforms dictionary.
-    [_shaderUniforms addEntriesFromDictionary:_effect.effectImpl.shaderUniforms];
+    // And update it with the node's main texture. The normap map is nil since
+    // effect nodes don't have them.
+    _shaderUniforms[CCShaderUniformMainTexture] = (_texture ?: [CCTexture none]);
+    _shaderUniforms[CCShaderUniformNormalMapTexture] = [CCTexture none];
 }
 
 @end

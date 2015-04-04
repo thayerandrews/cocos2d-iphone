@@ -7,13 +7,11 @@
 //
 
 #import "CCEffectShaderBuilder.h"
-#import "CCEffectFunction.h"
-#import "CCEffectUniform.h"
-#import "CCEffectVarying.h"
+
 
 @implementation CCEffectShaderBuilder
 
-- (id)initWithType:(CCEffectShaderBuilderType)type functions:(NSArray *)functions calls:(NSArray *)calls temporaries:(NSArray *)temporaries uniforms:(NSArray *)uniforms
+- (id)initWithType:(CCEffectShaderBuilderType)type functions:(NSArray *)functions calls:(NSArray *)calls temporaries:(NSArray *)temporaries
 {
     NSAssert(functions, @"");
     NSAssert(calls, @"");
@@ -24,9 +22,14 @@
         _functions = [functions copy];
         _calls = [calls copy];
         _temporaries = [temporaries copy];
-        _uniforms = [uniforms copy];
     }
     return self;
+}
+
+- (NSArray *)parameters
+{
+    NSAssert(0, @"Subclasses must override this.");
+    return nil;
 }
 
 @end

@@ -505,14 +505,12 @@
 
 - (void)updateShaderUniformsFromEffect
 {
-    // Initialize the shader uniforms dictionary with the sprite's main texture and
-    // normal map if it has them.
-    _shaderUniforms = [@{ CCShaderUniformMainTexture : (_texture ?: [CCTexture none]),
-                          CCShaderUniformNormalMapTexture : (_normalMapSpriteFrame.texture ?: [CCTexture none]),
-                          } mutableCopy];
-    
-    // And then copy the new effect's uniforms into the node's uniforms dictionary.
-    [_shaderUniforms addEntriesFromDictionary:_effect.effectImpl.shaderUniforms];
+    // Initialize the shader uniforms dictionary with the effect's parameters.
+    _shaderUniforms = [_effect.effectImpl.shaderParameters mutableCopy];
+
+    // And update it with the sprite's main texture and normal map texture.
+    _shaderUniforms[CCShaderUniformMainTexture] = (_texture ?: [CCTexture none]);
+    _shaderUniforms[CCShaderUniformNormalMapTexture] = (_normalMapSpriteFrame.texture ?: [CCTexture none]);
 }
 
 @end

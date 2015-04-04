@@ -47,7 +47,9 @@ NSString * const CCShaderUniformSinTime = @"cc_SinTime";
 NSString * const CCShaderUniformCosTime = @"cc_CosTime";
 NSString * const CCShaderUniformRandom01 = @"cc_Random01";
 NSString * const CCShaderUniformMainTexture = @"cc_MainTexture";
+NSString * const CCShaderUniformMainTextureSampler = @"cc_MainTextureSampler";
 NSString * const CCShaderUniformNormalMapTexture = @"cc_NormalMapTexture";
+NSString * const CCShaderUniformNormalMapTextureSampler = @"cc_NormalMapTextureSampler";
 NSString * const CCShaderUniformAlphaTestValue = @"cc_AlphaTestValue";
 
 

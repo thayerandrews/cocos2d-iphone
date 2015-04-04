@@ -6,9 +6,10 @@
 //
 //
 
+#import "CCEffectParameterProtocol.h"
 #import <Foundation/Foundation.h>
 
-@interface CCEffectUniform : NSObject
+@interface CCEffectUniform : NSObject <CCEffectParameterProtocol>
 
 @property (nonatomic, readonly) NSString* name;
 @property (nonatomic, readonly) NSString* type;

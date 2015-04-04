@@ -6,7 +6,8 @@
 //
 //
 
-#import "CCShader.h"
+#import <Foundation/Foundation.h>
+
 
 typedef NS_ENUM(NSUInteger, CCEffectShaderBuilderType)
 {
@@ -21,8 +22,8 @@ typedef NS_ENUM(NSUInteger, CCEffectShaderBuilderType)
 @property (nonatomic, readonly) NSArray* functions;
 @property (nonatomic, readonly) NSArray* calls;
 @property (nonatomic, readonly) NSArray* temporaries;
-@property (nonatomic, readonly) NSArray* uniforms;
+@property (nonatomic, readonly) NSArray* parameters;
 
-- (id)initWithType:(CCEffectShaderBuilderType)type functions:(NSArray *)functions calls:(NSArray *)calls temporaries:(NSArray *)temporaries uniforms:(NSArray *)uniforms;
+- (id)initWithType:(CCEffectShaderBuilderType)type functions:(NSArray *)functions calls:(NSArray *)calls temporaries:(NSArray *)temporaries;
 
 @end

@@ -15,11 +15,17 @@
 #import "CCRenderer.h"
 
 
-NSString * const CCShaderUniformPreviousPassTexture = @"cc_PreviousPassTexture";
-NSString * const CCShaderUniformTexCoord1Center     = @"cc_FragTexCoord1Center";
-NSString * const CCShaderUniformTexCoord1Extents    = @"cc_FragTexCoord1Extents";
-NSString * const CCShaderUniformTexCoord2Center     = @"cc_FragTexCoord2Center";
-NSString * const CCShaderUniformTexCoord2Extents    = @"cc_FragTexCoord2Extents";
+NSString * const CCShaderUniformPreviousPassTexture        = @"cc_PreviousPassTexture";
+NSString * const CCShaderUniformPreviousPassTextureSampler = @"cc_PreviousPassTextureSampler";
+NSString * const CCShaderUniformTexCoord1Center            = @"cc_FragTexCoord1Center";
+NSString * const CCShaderUniformTexCoord1Extents           = @"cc_FragTexCoord1Extents";
+NSString * const CCShaderUniformTexCoord2Center            = @"cc_FragTexCoord2Center";
+NSString * const CCShaderUniformTexCoord2Extents           = @"cc_FragTexCoord2Extents";
+
+NSString * const CCShaderArgumentVertexId                  = @"cc_VertexId";
+NSString * const CCShaderArgumentVertexAtttributes         = @"cc_VertexAttributes";
+NSString * const CCShaderArgumentTexCoordDimensions        = @"cc_FragTexCoordDimensions";
+NSString * const CCShaderArgumentFragIn                    = @"cc_FragIn";
 
 const CCEffectPrepareResult CCEffectPrepareNoop     = { CCEffectPrepareSuccess, CCEffectPrepareNothingChanged };
 
@@ -40,16 +46,14 @@ const CCEffectPrepareResult CCEffectPrepareNoop     = { CCEffectPrepareSuccess, 
         _renderPasses = [renderPasses copy];
         _shaders = [shaders copy];
         
-        _shaderUniforms = [[NSMutableDictionary alloc] init];
+        _shaderParameters = [[NSMutableDictionary alloc] init];
         NSMutableArray *allUTTs = [[NSMutableArray alloc] init];
         for (CCEffectShader *shader in _shaders)
         {
             NSAssert([shader isKindOfClass:[CCEffectShader class]], @"Expected a CCEffectShader but received something else.");
+            [_shaderParameters addEntriesFromDictionary:shader.parameters];
             
-            NSMutableDictionary *shaderUniforms = [CCEffectImpl buildUniformDictionaryForShader:shader];
-            [_shaderUniforms addEntriesFromDictionary:shaderUniforms];
-            
-            [allUTTs addObject:[CCEffectImpl buildDefaultUniformTranslationTableFromUniformDictionary:shaderUniforms]];
+            [allUTTs addObject:[CCEffectImpl buildDefaultTranslationTableFromParameterDictionary:shader.parameters]];
         }
         
         // Setup the pass shaders based on the pass shader indices and
@@ -74,26 +78,10 @@ const CCEffectPrepareResult CCEffectPrepareNoop     = { CCEffectPrepareSuccess, 
     return self;
 }
 
-+ (NSMutableDictionary *)buildUniformDictionaryForShader:(CCEffectShader *)shader
-{
-    NSMutableDictionary *uniforms = [[NSMutableDictionary alloc] init];
-    
-    for(CCEffectUniform* uniform in shader.vertexShaderBuilder.uniforms)
-    {
-        uniforms[uniform.name] = uniform.value;
-    }
-    
-    for(CCEffectUniform* uniform in shader.fragmentShaderBuilder.uniforms)
-    {
-        uniforms[uniform.name] = uniform.value;
-    }
-    return uniforms;
-}
-
-+ (NSMutableDictionary *)buildDefaultUniformTranslationTableFromUniformDictionary:(NSDictionary *)uniforms
++ (NSMutableDictionary *)buildDefaultTranslationTableFromParameterDictionary:(NSDictionary *)parameters
 {
     NSMutableDictionary *translationTable = [[NSMutableDictionary alloc] init];
-    for(NSString *key in uniforms)
+    for(NSString *key in parameters)
     {
         translationTable[key] = key;
     }
