@@ -224,7 +224,15 @@ static GLKVector2 selectTexCoordPadding(CCEffectTexCoordSource tcSource, GLKVect
         {
             bool inverted;
             
-            GLKMatrix4 renderTargetProjection = GLKMatrix4MakeOrtho(-effect.padding.width, _contentSize.width + effect.padding.width, -effect.padding.height, _contentSize.height + effect.padding.height, -1024.0f, 1024.0f);
+            GLKMatrix4 renderTargetProjection = GLKMatrix4MakeOrtho(-effect.padding.width, _contentSize.width + effect.padding.width,
+                                                                    -effect.padding.height, _contentSize.height + effect.padding.height,
+                                                                    -1024.0f, 1024.0f);
+            if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+            {
+                // Metal has inverted Y
+                renderTargetProjection = GLKMatrix4Multiply(GLKMatrix4MakeScale(1.0, -1.0, 1.0), renderTargetProjection);
+            }
+            
             GLKMatrix4 invRenderTargetProjection = GLKMatrix4Invert(renderTargetProjection, &inverted);
             NSAssert(inverted, @"Unable to invert matrix.");
             

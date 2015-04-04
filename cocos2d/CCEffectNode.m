@@ -99,6 +99,11 @@
 	[_sprite setTextureRect:rect];
     
     _projection = GLKMatrix4MakeOrtho(0.0f, _allocatedSize.width, 0.0f, _allocatedSize.height, -1024.0f, 1024.0f);
+    if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+    {
+        // Metal has inverted Y
+        _projection = GLKMatrix4Multiply(GLKMatrix4MakeScale(1.0, -1.0, 1.0), _projection);
+    }
 }
 
 -(void)destroy
