@@ -19,10 +19,12 @@
 #import "CCEffectUtils.h"
 #import "CCTexture.h"
 #import "CCImage.h"
+#import "CCSetup.h"
 
 #import "CCDirector_Private.h"
 #import "CCEffect_Private.h"
 #import "CCRenderer_Private.h"
+#import "CCSetup_Private.h"
 #import "CCSprite_Private.h"
 #import "CCTexture_Private.h"
 
@@ -111,7 +113,7 @@ static GLKVector2 selectTexCoordPadding(CCEffectTexCoordSource tcSource, GLKVect
         _allRenderTargets = [[NSMutableArray alloc] init];
         _freeRenderTargets = [[NSMutableArray alloc] init];
         _contentSize = CGSizeMake(1.0f, 1.0f);
-        _contentScale = [CCDirector currentDirector].contentScaleFactor;
+        _contentScale = [CCSetup sharedSetup].assetScale;
     }
     return self;
 }
@@ -227,7 +229,7 @@ static GLKVector2 selectTexCoordPadding(CCEffectTexCoordSource tcSource, GLKVect
             GLKMatrix4 renderTargetProjection = GLKMatrix4MakeOrtho(-effect.padding.width, _contentSize.width + effect.padding.width,
                                                                     -effect.padding.height, _contentSize.height + effect.padding.height,
                                                                     -1024.0f, 1024.0f);
-            if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+            if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
             {
                 // Metal has inverted Y
                 renderTargetProjection = GLKMatrix4Multiply(GLKMatrix4MakeScale(1.0, -1.0, 1.0), renderTargetProjection);
@@ -298,7 +300,7 @@ static GLKVector2 selectTexCoordPadding(CCEffectTexCoordSource tcSource, GLKVect
             powH = CCNextPOT(size.height);
         }
         
-        CGFloat contentScale = [CCDirector currentDirector].contentScaleFactor;
+        CGFloat contentScale = [CCSetup sharedSetup].assetScale;
         CCImage *image = [[CCImage alloc] initWithPixelSize:CGSizeMake(powW, powH) contentScale:contentScale pixelData:nil];
         image.contentSize = CC_SIZE_SCALE(size, 1.0/contentScale);
         

@@ -7,7 +7,7 @@
 //
 
 #import "CCEffectFunction.h"
-#import "CCDeviceInfo.h"
+#import "CCSetup.h"
 
 
 #pragma mark CCEffectFunction
@@ -154,7 +154,7 @@
 
 +(instancetype)temporaryWithType:(NSString*)type name:(NSString*)name initializer:(CCEffectFunctionInitializer)initializer
 {
-    if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+    if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
     {
         return [[CCEffectFunctionTemporaryMetal alloc] initWithType:type name:name initializer:initializer];
     }

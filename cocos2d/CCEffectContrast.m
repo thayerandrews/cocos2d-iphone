@@ -7,12 +7,12 @@
 //
 
 #import "CCEffectContrast.h"
-#import "CCDeviceInfo.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
 #import "CCEffectShaderBuilderMetal.h"
 #import "CCEffect_Private.h"
 #import "CCRenderer.h"
+#import "CCSetup.h"
 #import "CCTexture.h"
 
 static float conditionContrast(float contrast);
@@ -214,7 +214,7 @@ static float conditionContrast(float contrast);
         _contrast = contrast;
         _conditionedContrast = [NSNumber numberWithFloat:conditionContrast(contrast)];
 
-        if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
         {
             self.effectImpl = [[CCEffectContrastImplMetal alloc] initWithInterface:self];
         }

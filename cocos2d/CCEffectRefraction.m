@@ -7,7 +7,6 @@
 //
 
 #import "CCEffectRefraction.h"
-#import "CCDeviceInfo.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
 #import "CCEffectShaderBuilderMetal.h"
@@ -15,6 +14,7 @@
 #import "CCDirector.h"
 #import "CCEffectUtils.h"
 #import "CCRenderer.h"
+#import "CCSetup.h"
 #import "CCSpriteFrame.h"
 #import "CCTexture.h"
 
@@ -486,7 +486,7 @@ typedef struct CCEffectRefractionParameters
 
         _conditionedRefraction = CCEffectUtilsConditionRefraction(refraction);
         
-        if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
         {
             self.effectImpl = [[CCEffectRefractionImplMetal alloc] initWithInterface:self];
         }

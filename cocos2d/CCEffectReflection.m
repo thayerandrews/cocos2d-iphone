@@ -7,7 +7,6 @@
 //
 
 #import "CCEffectReflection.h"
-#import "CCDeviceInfo.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
 #import "CCEffectShaderBuilderMetal.h"
@@ -15,6 +14,7 @@
 #import "CCDirector.h"
 #import "CCEffectUtils.h"
 #import "CCRenderer.h"
+#import "CCSetup.h"
 #import "CCSpriteFrame.h"
 #import "CCTexture.h"
 
@@ -538,7 +538,7 @@ typedef struct CCEffectReflectionParameters
         _conditionedFresnelBias = CCEffectUtilsConditionFresnelBias(_fresnelBias);
         _conditionedFresnelPower = CCEffectUtilsConditionFresnelPower(_fresnelPower);
         
-        if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
         {
             self.effectImpl = [[CCEffectReflectionImplMetal alloc] initWithInterface:self];
         }

@@ -7,12 +7,12 @@
 
 
 #import "CCEffectHue.h"
-#import "CCDeviceInfo.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
 #import "CCEffectShaderBuilderMetal.h"
 #import "CCEffect_Private.h"
 #import "CCRenderer.h"
+#import "CCSetup.h"
 #import "CCTexture.h"
 
 static float conditionHue(float hue);
@@ -210,7 +210,7 @@ static GLKMatrix4 matrixWithHue(float hue);
 {
     if((self = [super init]))
     {
-        if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
         {
             self.effectImpl = [[CCEffectHueImplMetal alloc] initWithInterface:self];
         }

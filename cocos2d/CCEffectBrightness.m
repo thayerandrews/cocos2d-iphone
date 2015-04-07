@@ -7,12 +7,12 @@
 //
 
 #import "CCEffectBrightness.h"
-#import "CCDeviceInfo.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
 #import "CCEffectShaderBuilderMetal.h"
 #import "CCEffect_Private.h"
 #import "CCRenderer.h"
+#import "CCSetup.h"
 #import "CCTexture.h"
 
 static float conditionBrightness(float brightness);
@@ -212,7 +212,7 @@ static float conditionBrightness(float brightness);
         _brightness = brightness;
         _conditionedBrightness = [NSNumber numberWithFloat:conditionBrightness(brightness)];
 
-        if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
         {
             self.effectImpl = [[CCEffectBrightnessImplMetal alloc] initWithInterface:self];
         }

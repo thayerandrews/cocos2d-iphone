@@ -7,12 +7,12 @@
 //
 
 #import "CCEffectColorChannelOffset.h"
-#import "CCDeviceInfo.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
 #import "CCEffectShaderBuilderMetal.h"
 #import "CCEffect_Private.h"
 #import "CCRenderer.h"
+#import "CCSetup.h"
 #import "CCTexture.h"
 
 
@@ -91,7 +91,7 @@
                                    float blueInBounds = step(0.0, min(blueCompare.x, blueCompare.y));
                                    vec4 blueSample = inputValue * texture2D(cc_PreviousPassTexture, blueSamplePos) * blueInBounds;
                                    
-                                   return vec4(redSample.r, greenSample.g, blueSample.b, (redSample.a + greenSample.a + blueSample.a) / 3.0);
+                                   return vec4(redSample.r, greenSample.g, blueSample.b, max(max(redSample.a, greenSample.a), blueSample.a));
                                    );
     
     CCEffectFunction* fragmentFunction = [[CCEffectFunction alloc] initWithName:@"colorChannelOffsetEffect" body:effectBody inputs:@[input] returnType:@"vec4"];
@@ -313,7 +313,7 @@ typedef struct CCEffectColorChannelOffsetParameters
         _greenOffset = greenOffset;
         _blueOffset = blueOffset;
         
-        if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
         {
             self.effectImpl = [[CCEffectColorChannelOffsetImplMetal alloc] initWithInterface:self];
         }

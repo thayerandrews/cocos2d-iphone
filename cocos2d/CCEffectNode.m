@@ -12,9 +12,9 @@
 #import "CCDirector.h"
 #import "ccMacros.h"
 #import "CCShader.h"
-#import "CCDeviceInfo.h"
+#import "CCSetup.h"
 #import "Support/ccUtils.h"
-#import "Support/CCFileUtils.h"
+#import "CCFileLocator.h"
 #import "Support/CGPointExtension.h"
 
 #import "CCTexture_Private.h"
@@ -99,7 +99,7 @@
 	[_sprite setTextureRect:rect];
     
     _projection = GLKMatrix4MakeOrtho(0.0f, _allocatedSize.width, 0.0f, _allocatedSize.height, -1024.0f, 1024.0f);
-    if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+    if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
     {
         // Metal has inverted Y
         _projection = GLKMatrix4Multiply(GLKMatrix4MakeScale(1.0, -1.0, 1.0), _projection);

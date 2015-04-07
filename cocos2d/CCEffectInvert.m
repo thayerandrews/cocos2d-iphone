@@ -7,13 +7,13 @@
 //
 
 #import "CCEffectInvert.h"
-#import "CCDeviceInfo.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
 #import "CCEffectShaderBuilderMetal.h"
 #import "CCEffect_Private.h"
 #import "CCProtocols.h"
 #import "CCRendererBasicTypes.h"
+#import "CCSetup.h"
 #import "CCTexture.h"
 
 
@@ -184,7 +184,7 @@
 {
     if((self = [super init]))
     {
-        if([CCDeviceInfo sharedDeviceInfo].graphicsAPI == CCGraphicsAPIMetal)
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
         {
             self.effectImpl = [[CCEffectInvertImplMetal alloc] init];
         }
