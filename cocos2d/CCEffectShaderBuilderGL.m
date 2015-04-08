@@ -43,6 +43,13 @@ static NSString * const fragTemplate =
         _uniforms = [uniforms copy];
         _varyings = [varyings copy];
         
+        for(CCEffectFunctionTemporary *temporary in self.temporaries)
+        {
+            NSAssert([temporary isKindOfClass:[CCEffectFunctionTemporaryGL class]], @"Supplied temporary is not a GL temporary.");
+            NSAssert(((type == CCEffectShaderBuilderVertex) && temporary.isValidForVertexShader) ||
+                     ((type == CCEffectShaderBuilderFragment) && temporary.isValidForFragmentShader),
+                     @"The temporary's initializer does not match the shader type.");
+        }
     }
     return self;
 }
@@ -145,12 +152,7 @@ static NSString * const fragTemplate =
     NSMutableDictionary *allocatedTemps = [[NSMutableDictionary alloc] init];
     for(CCEffectFunctionTemporary *temporary in temporaries)
     {
-        NSAssert([temporary isKindOfClass:[CCEffectFunctionTemporaryGL class]], @"Supplied temporary is not a GL temporary.");
-        NSAssert(!allocatedTemps[temporary.name], @"Redeclaration of temporary variable.");
-        NSAssert(((type == CCEffectShaderBuilderVertex) && temporary.isValidForVertexShader) ||
-                 ((type == CCEffectShaderBuilderFragment) && temporary.isValidForFragmentShader),
-                 @"The temporary's initializer does not match the shader type.");
-        
+        NSAssert(!allocatedTemps[temporary.name], @"Redeclaration of temporary variable.");        
         allocatedTemps[temporary.name] = temporary.type;
         [shaderString appendFormat:@"    %@;\n", temporary.declaration];
     }

@@ -53,6 +53,14 @@ static NSString * const CCEffectTexCoordDimensionsStruct = @"CCEffectTexCoordDim
         _cachedShaderSource = nil;
         _arguments = [arguments copy];
         _structs = [structs copy];
+        
+        for(CCEffectFunctionTemporary *temporary in self.temporaries)
+        {
+            NSAssert([temporary isKindOfClass:[CCEffectFunctionTemporaryMetal class]], @"Supplied temporary is not a GL temporary.");
+            NSAssert(((type == CCEffectShaderBuilderVertex) && temporary.isValidForVertexShader) ||
+                     ((type == CCEffectShaderBuilderFragment) && temporary.isValidForFragmentShader),
+                     @"The temporary's initializer does not match the shader type.");
+        }
     }
     return self;
 }
@@ -235,12 +243,7 @@ static NSString * const CCEffectTexCoordDimensionsStruct = @"CCEffectTexCoordDim
     NSMutableDictionary *allocatedInputs = [[NSMutableDictionary alloc] init];
     for(CCEffectFunctionTemporary *temporary in temporaries)
     {
-        NSAssert([temporary isKindOfClass:[CCEffectFunctionTemporaryMetal class]], @"Supplied temporary is not a GL temporary.");
-        NSAssert(!allocatedInputs[temporary.name], @"Redeclaration of temporary variable.");
-        NSAssert(((type == CCEffectShaderBuilderVertex) && temporary.isValidForVertexShader) ||
-                 ((type == CCEffectShaderBuilderFragment) && temporary.isValidForFragmentShader),
-                 @"The temporary's initializer does not match the shader type.");
-        
+        NSAssert(!allocatedInputs[temporary.name], @"Redeclaration of temporary variable.");        
         allocatedInputs[temporary.name] = temporary.type;
         [bodyString appendFormat:@"    %@;\n", temporary.declaration];
     }
