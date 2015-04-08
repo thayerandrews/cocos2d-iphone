@@ -10,16 +10,31 @@
 
 #if CC_EFFECTS_EXPERIMENTAL
 
+//#import "CCEffectShader.h"
+//#import "CCEffectShaderBuilderGL.h"
+//#import "CCEffect_Private.h"
+//#import "CCSprite_Private.h"
+//#import "CCTexture.h"
+//#import "CCSpriteFrame.h"
+//#import "CCColor.h"
+//#import "NSValue+CCRenderer.h"
+//#import "CCRendererBasicTypes.h"
+//#import "CCSetup.h"
+//
+
+#import "CCEffectOutline.h"
+#import "CCColor.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
+#import "CCEffectShaderBuilderMetal.h"
 #import "CCEffect_Private.h"
+#import "CCRenderer.h"
+#import "CCSetup.h"
 #import "CCSprite_Private.h"
 #import "CCTexture.h"
-#import "CCSpriteFrame.h"
-#import "CCColor.h"
-#import "NSValue+CCRenderer.h"
-#import "CCRendererBasicTypes.h"
 
+
+#pragma mark - CCEffectOutlineImplGL
 
 @interface CCEffectOutlineImplGL : CCEffectImpl
 @property (nonatomic, weak) CCEffectOutline *interface;
@@ -186,6 +201,150 @@
 @end
 
 
+#pragma mark - CCEffectOutlineImplMetal
+
+typedef struct CCEffectOutlineParameters
+{
+    GLKVector4 outlineColor;
+    GLKVector2 stepSize;
+} CCEffectOutlineParameters;
+
+
+@interface CCEffectOutlineImplMetal : CCEffectImpl
+@property (nonatomic, weak) CCEffectOutline *interface;
+@end
+
+@implementation CCEffectOutlineImplMetal
+
+
+-(id)initWithInterface:(CCEffectOutline *)interface
+{
+    NSArray *renderPasses = [CCEffectOutlineImplMetal buildRenderPassesWithInterface:interface];
+    NSArray *shaders = [CCEffectOutlineImplMetal buildShaders];
+    
+    if((self = [super initWithRenderPasses:renderPasses shaders:shaders]))
+    {
+        self.interface = interface;
+        self.debugName = @"CCEffectOutlineImplMetal";
+    }
+    return self;
+}
+
++ (NSArray *)buildStructDeclarations
+{
+    NSString* structOffsetParams =
+    @"float4 outlineColor;\n"
+    @"float2 stepSize;\n";
+    
+    return @[
+             [[CCEffectShaderStructDeclaration alloc] initWithName:@"CCEffectOutlineParameters" body:structOffsetParams]
+             ];
+}
+
++ (NSArray *)buildShaders
+{
+    return @[[[CCEffectShader alloc] initWithVertexShaderBuilder:[CCEffectShaderBuilderMetal defaultVertexShaderBuilder] fragmentShaderBuilder:[CCEffectOutlineImplMetal fragShaderBuilder]]];
+}
+
++ (CCEffectShaderBuilder *)fragShaderBuilder
+{
+    NSArray *functions = [CCEffectOutlineImplMetal buildFragmentFunctions];
+    NSArray *temporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"half4" name:@"tmp" initializer:CCEffectInitFragColor]];
+    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[0] outputName:@"outlined" inputs:@{@"cc_FragIn" : @"cc_FragIn",
+                                                                                                                   @"cc_PreviousPassTexture" : @"cc_PreviousPassTexture",
+                                                                                                                   @"cc_PreviousPassTextureSampler" : @"cc_PreviousPassTextureSampler",
+                                                                                                                   @"cc_MainTexture" : @"cc_MainTexture",
+                                                                                                                   @"cc_MainTextureSampler" : @"cc_MainTextureSampler",
+                                                                                                                   @"cc_FragTexCoordDimensions" : @"cc_FragTexCoordDimensions",
+                                                                                                                   @"outlineParams" : @"outlineParams",
+                                                                                                                   @"inputValue" : @"tmp"
+                                                                                                                   }]];
+    NSArray *arguments = @[
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device CCEffectOutlineParameters*" name:@"outlineParams" qualifier:CCEffectShaderArgumentBuffer]
+                           ];
+
+    NSArray *structs = [CCEffectOutlineImplMetal buildStructDeclarations];
+    
+    return [[CCEffectShaderBuilderMetal alloc] initWithType:CCEffectShaderBuilderFragment
+                                                  functions:functions
+                                                      calls:calls
+                                                temporaries:temporaries
+                                                  arguments:[[CCEffectShaderBuilderMetal defaultFragmentArguments] arrayByAddingObjectsFromArray:arguments]
+                                                    structs:[[CCEffectShaderBuilderMetal defaultStructDeclarations] arrayByAddingObjectsFromArray:structs]];
+}
+
++ (NSArray *)buildFragmentFunctions
+{
+    NSString* effectBody = CC_GLSL(
+                                   // Use Laplacian matrix / filter to find the edges
+                                   // Apply this kernel to each pixel
+                                   /*
+                                     0 -1  0
+                                    -1  4 -1
+                                     0 -1  0
+                                    */
+                                   half4 sampleColor = cc_PreviousPassTexture.sample(cc_PreviousPassTextureSampler, cc_FragIn.texCoord1);
+                                   float alpha = 4.0 * sampleColor.a;
+                                   alpha -= cc_PreviousPassTexture.sample(cc_PreviousPassTextureSampler, cc_FragIn.texCoord1 + float2(outlineParams->stepSize.x, 0.0)).a;
+                                   alpha -= cc_PreviousPassTexture.sample(cc_PreviousPassTextureSampler, cc_FragIn.texCoord1 + float2(-outlineParams->stepSize.x, 0.0)).a;
+                                   alpha -= cc_PreviousPassTexture.sample(cc_PreviousPassTextureSampler, cc_FragIn.texCoord1 + float2(0.0, outlineParams->stepSize.y)).a;
+                                   alpha -= cc_PreviousPassTexture.sample(cc_PreviousPassTextureSampler, cc_FragIn.texCoord1 + float2(0.0, -outlineParams->stepSize.y)).a;
+                                   
+                                   // do everthing in 1 pass
+                                   half4 resultColor = inputValue * sampleColor;
+                                   resultColor = (half4) mix((float4)resultColor, outlineParams->outlineColor, alpha);
+                                   
+                                   return resultColor;
+                                   );
+    
+    NSArray *inputs = @[
+                        [[CCEffectFunctionInput alloc] initWithType:@"const CCFragData" name:CCShaderArgumentFragIn],
+                        [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:CCShaderUniformMainTexture],
+                        [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:CCShaderUniformMainTextureSampler],
+                        [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:CCShaderUniformPreviousPassTexture],
+                        [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:CCShaderUniformPreviousPassTextureSampler],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device CCEffectTexCoordDimensions*" name:CCShaderArgumentTexCoordDimensions],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device CCEffectOutlineParameters*" name:@"outlineParams"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"half4" name:@"inputValue"]
+                        ];
+    
+    return @[[[CCEffectFunction alloc] initWithName:@"outlineEffect" body:effectBody inputs:inputs returnType:@"half4"]];
+}
+
+
++ (NSArray *)buildRenderPassesWithInterface:(CCEffectOutline *)interface
+{
+    __weak CCEffectOutline *weakInterface = interface;
+    
+    CCEffectRenderPass *pass0 = [[CCEffectRenderPass alloc] init];
+    pass0.debugLabel = @"CCEffectOutline pass 0";
+    pass0.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+        
+        passInputs.shaderUniforms[CCShaderUniformMainTexture] = passInputs.previousPassTexture;
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = passInputs.texCoord1Center;
+        tcDims.texCoord1Extents = passInputs.texCoord1Extents;
+        tcDims.texCoord2Center = passInputs.texCoord2Center;
+        tcDims.texCoord2Extents = passInputs.texCoord2Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+        
+        CCEffectOutlineParameters parameters;
+        parameters.outlineColor = weakInterface.outlineColor.glkVector4;
+        parameters.stepSize = GLKVector2Make(weakInterface.outlineWidth / passInputs.previousPassTexture.contentSize.width,
+                                             weakInterface.outlineWidth / passInputs.previousPassTexture.contentSize.height);
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"outlineParams"]] = [NSValue valueWithBytes:&parameters objCType:@encode(CCEffectOutlineParameters)];
+    }]];
+    
+    return @[pass0];
+}
+
+@end
+
+
+#pragma mark - CCEffectOutline
+
 @implementation CCEffectOutline
 
 -(id)init
@@ -200,7 +359,14 @@
         _outlineColor = outlineColor;
         _outlineWidth = outlineWidth;
         
-        self.effectImpl = [[CCEffectOutlineImplGL alloc] initWithInterface:self];
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            self.effectImpl = [[CCEffectOutlineImplMetal alloc] initWithInterface:self];
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectOutlineImplGL alloc] initWithInterface:self];
+        }
         self.debugName = @"CCEffectHue";
     }
     return self;
