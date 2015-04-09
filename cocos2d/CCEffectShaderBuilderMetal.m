@@ -9,6 +9,7 @@
 #import "CCEffectShaderBuilderMetal.h"
 #import "CCEffectFunction.h"
 #import "CCEffect_Private.h"
+#import "CCSetup.h"
 
 
 static NSString * const vtxTemplate =
@@ -45,6 +46,7 @@ static NSString * const CCEffectTexCoordDimensionsStruct = @"CCEffectTexCoordDim
 
 - (id)initWithType:(CCEffectShaderBuilderType)type functions:(NSArray *)functions calls:(NSArray *)calls temporaries:(NSArray *)temporaries arguments:(NSArray *)arguments structs:(NSArray *)structs
 {
+    NSAssert([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal, @"You're constructing a Metal shader builder but the current graphics API is not Metal.");
     NSAssert(functions, @"");
     NSAssert(calls, @"");
     

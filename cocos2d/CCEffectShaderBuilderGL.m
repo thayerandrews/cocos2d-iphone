@@ -11,6 +11,7 @@
 #import "CCEffectUniform.h"
 #import "CCEffectVarying.h"
 #import "CCEffect_Private.h"
+#import "CCSetup.h"
 
 
 static NSString * const vtxTemplate =
@@ -33,6 +34,7 @@ static NSString * const fragTemplate =
 
 - (id)initWithType:(CCEffectShaderBuilderType)type functions:(NSArray *)functions calls:(NSArray *)calls temporaries:(NSArray *)temporaries uniforms:(NSArray *)uniforms varyings:(NSArray *)varyings
 {
+    NSAssert([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIGL, @"You're constructing a GL shader builder but the current graphics API is not GL.");
     NSAssert(functions, @"");
     NSAssert(calls, @"");
     
