@@ -53,7 +53,8 @@ static NSString * const CCEffectTexCoordDimensionsStruct = @"CCEffectTexCoordDim
         _cachedShaderSource = nil;
         _arguments = [arguments copy];
         _structs = [structs copy];
-        
+
+        // Error check the supplied temporaries
         for(CCEffectFunctionTemporary *temporary in self.temporaries)
         {
             NSAssert([temporary isKindOfClass:[CCEffectFunctionTemporaryMetal class]], @"Supplied temporary is not a GL temporary.");
@@ -61,6 +62,23 @@ static NSString * const CCEffectTexCoordDimensionsStruct = @"CCEffectTexCoordDim
                      ((type == CCEffectShaderBuilderFragment) && temporary.isValidForFragmentShader),
                      @"The temporary's initializer does not match the shader type.");
         }
+        
+        // Error check the supplied arguments.
+        NSUInteger argumentCounts[CCEffectShaderArgumentQualifierCount];
+        memset(&argumentCounts, 0, sizeof(argumentCounts));
+        for(CCEffectShaderArgument *argument in arguments)
+        {
+            NSAssert(argument.qualifier != CCEffectShaderArgumentDstColor, @"The destination color qualifier is currently unsupported.");
+            argumentCounts[argument.qualifier]++;
+        }
+        
+        NSAssert(((type == CCEffectShaderBuilderVertex) && (argumentCounts[CCEffectShaderArgumentStageIn] == 0)) ||
+                 ((type == CCEffectShaderBuilderFragment) && (argumentCounts[CCEffectShaderArgumentStageIn] == 1)),
+                 @"Vertex shaders can't have any stage_in arguments. Fragment shaders can only have one stage_in argument.");
+        
+        NSAssert(((type == CCEffectShaderBuilderVertex) && (argumentCounts[CCEffectShaderArgumentVertexId] == 1)) ||
+                 ((type == CCEffectShaderBuilderFragment) && (argumentCounts[CCEffectShaderArgumentVertexId] == 0)),
+                 @"Vertex shaders can have only one vertex_id argument. Fragment shaders can't have any vertex_id arguments.");
     }
     return self;
 }
@@ -225,16 +243,7 @@ static NSString * const CCEffectTexCoordDimensionsStruct = @"CCEffectTexCoordDim
         }
         argumentCounts[argument.qualifier]++;
     }
-    
-    NSAssert(((type == CCEffectShaderBuilderVertex) && (argumentCounts[CCEffectShaderArgumentStageIn] == 0)) ||
-             ((type == CCEffectShaderBuilderFragment) && (argumentCounts[CCEffectShaderArgumentStageIn] == 1)),
-             @"Vertex shaders can't have any stage_in arguments. Fragment shaders can only have one stage_in argument.");
-
-    NSAssert(((type == CCEffectShaderBuilderVertex) && (argumentCounts[CCEffectShaderArgumentVertexId] == 1)) ||
-             ((type == CCEffectShaderBuilderFragment) && (argumentCounts[CCEffectShaderArgumentVertexId] == 0)),
-             @"Vertex shaders can have only one vertex_id argument. Fragment shaders can't have any vertex_id arguments.");
-
-    
+        
     // Construct the body of the main function.
     NSMutableString *bodyString = [[NSMutableString alloc] init];
     
@@ -350,6 +359,7 @@ static NSString * const CCEffectTexCoordDimensionsStruct = @"CCEffectTexCoordDim
                     @"buffer",
                     @"texture",
                     @"sampler",
+                    @"color",
                     @"stage_in",
                     @"vertex_id"
                     ];

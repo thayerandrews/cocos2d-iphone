@@ -32,9 +32,10 @@ typedef NS_ENUM(NSUInteger, CCEffectShaderArgumentQualifier)
     CCEffectShaderArgumentBuffer       = 0,
     CCEffectShaderArgumentTexture      = 1,
     CCEffectShaderArgumentSampler      = 2,
+    CCEffectShaderArgumentDstColor     = 3,
     
-    CCEffectShaderArgumentStageIn      = 3,
-    CCEffectShaderArgumentVertexId     = 4,
+    CCEffectShaderArgumentStageIn      = 4,
+    CCEffectShaderArgumentVertexId     = 5,
     
     CCEffectShaderArgumentQualifierCount,
 };
