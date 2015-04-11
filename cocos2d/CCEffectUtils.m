@@ -223,11 +223,19 @@ CCEffectBlurParams CCEffectUtilsComputeBlurParams(NSUInteger radius)
     result.trueNumberOfOptimizedOffsets = ((calculatedSampleRadius / 2) + (calculatedSampleRadius % 2));
     result.numberOfOptimizedOffsets = MIN(result.trueNumberOfOptimizedOffsets, BLUR_OPTIMIZED_RADIUS_MAX);
     
+#if 0
+    result.trueRadius = 2;
+    result.sigma = 0;
+    result.numberOfOptimizedOffsets = 1;
+    result.trueNumberOfOptimizedOffsets = 1;
+#endif
+    
     return result;
 }
 
 GLfloat* CCEffectUtilsComputeGaussianWeightsWithBlurParams(CCEffectBlurParams params)
 {
+#if 1
     GLfloat *standardGaussianWeights = calloc(params.trueRadius + 1, sizeof(GLfloat));
     GLfloat sumOfWeights = 0.0f;
     
@@ -264,8 +272,17 @@ GLfloat* CCEffectUtilsComputeGaussianWeightsWithBlurParams(CCEffectBlurParams pa
     {
         standardGaussianWeights[currentGaussianWeightIndex] = standardGaussianWeights[currentGaussianWeightIndex] / sumOfWeights;
     }
-
+    
     return standardGaussianWeights;
+#else
+    GLfloat *standardGaussianWeights = calloc(params.trueRadius + 1, sizeof(GLfloat));
+
+    standardGaussianWeights[0] = 3.0f / 8.0f;
+    standardGaussianWeights[1] = 1.0f / 4.0f;
+    standardGaussianWeights[2] = 1.0f / 16.0f;
+    
+    return standardGaussianWeights;
+#endif
 }
 
 
