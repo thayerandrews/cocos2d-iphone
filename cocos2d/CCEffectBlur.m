@@ -79,24 +79,25 @@
                                                                                        calls:fragCalls
                                                                                  temporaries:fragTemporaries
                                                                                     uniforms:fragUniforms
-                                                                                    varyings:varyings];
+//                                                                                    varyings:varyings];
+                                                                                    varyings:@[]];
     
     
-    NSArray *vertFunctions = [CCEffectBlurImplGL buildVertexFunctionsWithBlurParams:blurParams];
-    NSArray *vertCalls = @[[[CCEffectFunctionCall alloc] initWithFunction:vertFunctions[0] outputName:@"blur" inputs:nil]];
-    NSArray *vertUniforms = @[
-                              [CCEffectUniform uniform:@"highp vec2" name:@"u_blurDirection" value:[NSValue valueWithGLKVector2:GLKVector2Make(0.0f, 0.0f)]]
-                              ];
-    
-    CCEffectShaderBuilder *vertShaderBuilder = [[CCEffectShaderBuilderGL alloc] initWithType:CCEffectShaderBuilderVertex
-                                                                                   functions:vertFunctions
-                                                                                       calls:vertCalls
-                                                                                 temporaries:nil
-                                                                                    uniforms:vertUniforms
-                                                                                    varyings:varyings];
-    
+//    NSArray *vertFunctions = [CCEffectBlurImplGL buildVertexFunctionsWithBlurParams:blurParams];
+//    NSArray *vertCalls = @[[[CCEffectFunctionCall alloc] initWithFunction:vertFunctions[0] outputName:@"blur" inputs:nil]];
+//    NSArray *vertUniforms = @[
+//                              [CCEffectUniform uniform:@"highp vec2" name:@"u_blurDirection" value:[NSValue valueWithGLKVector2:GLKVector2Make(0.0f, 0.0f)]]
+//                              ];
+//    
+//    CCEffectShaderBuilder *vertShaderBuilder = [[CCEffectShaderBuilderGL alloc] initWithType:CCEffectShaderBuilderVertex
+//                                                                                   functions:vertFunctions
+//                                                                                       calls:vertCalls
+//                                                                                 temporaries:nil
+//                                                                                    uniforms:vertUniforms
+//                                                                                    varyings:varyings];
+//    
     NSArray *renderPasses = [CCEffectBlurImplGL buildRenderPasses];
-    NSArray *shaders =  @[[[CCEffectShader alloc] initWithVertexShaderBuilder:vertShaderBuilder fragmentShaderBuilder:fragShaderBuilder]];
+    NSArray *shaders =  @[[[CCEffectShader alloc] initWithVertexShaderBuilder:[CCEffectShaderBuilderGL defaultVertexShaderBuilder] fragmentShaderBuilder:fragShaderBuilder]];
 
     if((self = [super initWithRenderPasses:renderPasses shaders:shaders]))
     {
@@ -111,6 +112,7 @@
 
 + (NSArray *)buildFragmentFunctionsWithBlurParams:(CCEffectBlurParams)blurParams
 {
+#if 0
     // Compute the standard gaussian weights
     GLfloat *standardGaussianWeights = CCEffectUtilsComputeGaussianWeightsWithBlurParams(blurParams);
     
@@ -180,6 +182,71 @@
     CCEffectFunctionInput *input = [[CCEffectFunctionInput alloc] initWithType:@"vec4" name:@"inputValue"];
     CCEffectFunction* fragmentFunction = [[CCEffectFunction alloc] initWithName:@"blurEffect" body:shaderString inputs:@[input] returnType:@"vec4"];
     return @[fragmentFunction];
+#else
+    NSMutableString *shaderString = [[NSMutableString alloc] init];
+    
+    // Header
+    [shaderString appendFormat:@"\
+     lowp vec4 sum = vec4(0.0);\n\
+     vec2 compare;\
+     float inBounds;\
+     vec2 blurCoords;\
+     "];
+    
+    [shaderString appendString:@"highp vec2 singleStepOffset = u_blurDirection;\n"];
+
+    
+    float weights[] = { 0.5f, 0.25f, 0.1f };
+    unsigned int numTaps = (sizeof(weights) / sizeof(float) * 2) - 1;
+    
+    if (blurParams.sigma == 11.0f)
+    {
+        float gWeights[] = { 0.35f };
+        float gOffsets[] = { 0.45f / 0.35f };
+
+        [shaderString appendFormat:@"blurCoords = cc_FragTexCoord1.xy;"];
+        [shaderString appendString:@"compare = cc_FragTexCoord1Extents - abs(blurCoords - cc_FragTexCoord1Center);"];
+        [shaderString appendString:@"inBounds = step(0.0, min(compare.x, compare.y));"];
+        [shaderString appendFormat:@"sum += texture2D(cc_PreviousPassTexture, blurCoords) * inBounds * %f;\n", weights[0]];
+        
+        for (int i = 0; i < ((numTaps - 1) / 2); i++)
+        {
+            [shaderString appendFormat:@"blurCoords = cc_FragTexCoord1.xy + singleStepOffset * %f;", gOffsets[i]];
+            [shaderString appendString:@"compare = cc_FragTexCoord1Extents - abs(blurCoords - cc_FragTexCoord1Center);"];
+            [shaderString appendString:@"inBounds = step(0.0, min(compare.x, compare.y));"];
+            [shaderString appendFormat:@"sum += texture2D(cc_PreviousPassTexture, blurCoords) * inBounds * %f;\n", gWeights[i]];
+
+            [shaderString appendFormat:@"blurCoords = cc_FragTexCoord1.xy - singleStepOffset * %f;", gOffsets[i]];
+            [shaderString appendString:@"compare = cc_FragTexCoord1Extents - abs(blurCoords - cc_FragTexCoord1Center);"];
+            [shaderString appendString:@"inBounds = step(0.0, min(compare.x, compare.y));"];
+            [shaderString appendFormat:@"sum += texture2D(cc_PreviousPassTexture, blurCoords) * inBounds * %f;\n", gWeights[i]];
+        }
+    }
+    else
+    {
+        // Inner texture loop
+        for (int i = 0; i < numTaps; i++)
+        {
+            int offset = i - ((numTaps - 1) / 2.0f);
+            int weightIndex = offset;
+            if (weightIndex < 0)
+            {
+                weightIndex *= -1;
+            }
+            
+            [shaderString appendFormat:@"blurCoords = cc_FragTexCoord1.xy + singleStepOffset * %f;", (float)offset];
+            [shaderString appendString:@"compare = cc_FragTexCoord1Extents - abs(blurCoords - cc_FragTexCoord1Center);"];
+            [shaderString appendString:@"inBounds = step(0.0, min(compare.x, compare.y));"];
+            [shaderString appendFormat:@"sum += texture2D(cc_PreviousPassTexture, blurCoords) * inBounds * %f;\n", weights[weightIndex]];
+        }
+    }
+    
+    [shaderString appendString:@"\
+     return sum * inputValue;\n"];
+    
+    CCEffectFunctionInput *input = [[CCEffectFunctionInput alloc] initWithType:@"vec4" name:@"inputValue"];
+    return @[[[CCEffectFunction alloc] initWithName:@"blurEffect" body:shaderString inputs:@[input] returnType:@"vec4"]];
+#endif
 }
 
 + (NSArray *)buildVertexFunctionsWithBlurParams:(CCEffectBlurParams)blurParams
@@ -262,7 +329,7 @@
         
     }]];
     
-    return @[pass0, pass1];
+    return @[pass0/*, pass1*/];
 }
 
 @end
