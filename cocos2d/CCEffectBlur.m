@@ -183,6 +183,7 @@
     CCEffectFunction* fragmentFunction = [[CCEffectFunction alloc] initWithName:@"blurEffect" body:shaderString inputs:@[input] returnType:@"vec4"];
     return @[fragmentFunction];
 #else
+#if 0
     NSMutableString *shaderString = [[NSMutableString alloc] init];
     
     // Header
@@ -246,6 +247,52 @@
     
     CCEffectFunctionInput *input = [[CCEffectFunctionInput alloc] initWithType:@"vec4" name:@"inputValue"];
     return @[[[CCEffectFunction alloc] initWithName:@"blurEffect" body:shaderString inputs:@[input] returnType:@"vec4"]];
+#else
+    // Compute the standard gaussian weights
+    GLfloat *standardGaussianWeights = CCEffectUtilsComputeGaussianWeightsWithBlurParams(blurParams);
+    
+    NSMutableString *shaderString = [[NSMutableString alloc] init];
+    
+    // Header
+    [shaderString appendFormat:@"\
+     lowp vec4 sum = vec4(0.0);\n\
+     vec2 compare;\
+     float inBounds;\
+     vec2 blurCoords;\
+     "];
+    
+    [shaderString appendString:@"highp vec2 singleStepOffset = u_blurDirection;\n"];
+    
+    // Inner texture loop
+    [shaderString appendString:@"compare = cc_FragTexCoord1Extents - abs(cc_FragTexCoord1.xy - cc_FragTexCoord1Center);"];
+    [shaderString appendString:@"inBounds = step(0.0, min(compare.x, compare.y));"];
+    [shaderString appendFormat:@"sum += texture2D(cc_PreviousPassTexture, cc_FragTexCoord1.xy) * inBounds * %f;\n", standardGaussianWeights[0]];
+    
+    for (NSUInteger currentBlurCoordinateIndex = 0; currentBlurCoordinateIndex < blurParams.numberOfOptimizedOffsets; currentBlurCoordinateIndex++)
+    {
+        GLfloat firstWeight = standardGaussianWeights[currentBlurCoordinateIndex * 2 + 1];
+        GLfloat secondWeight = standardGaussianWeights[currentBlurCoordinateIndex * 2 + 2];
+        GLfloat optimizedWeight = firstWeight + secondWeight;
+        
+        GLfloat optimizedOffset = (firstWeight * (currentBlurCoordinateIndex * 2 + 1) + secondWeight * (currentBlurCoordinateIndex * 2 + 2)) / optimizedWeight;
+        
+        [shaderString appendFormat:@"blurCoords = cc_FragTexCoord1.xy + singleStepOffset * %f;", optimizedOffset];
+        [shaderString appendString:@"compare = cc_FragTexCoord1Extents - abs(blurCoords - cc_FragTexCoord1Center);"];
+        [shaderString appendString:@"inBounds = step(0.0, min(compare.x, compare.y));"];
+        [shaderString appendFormat:@"sum += texture2D(cc_PreviousPassTexture, blurCoords) * inBounds * %f;\n", optimizedWeight];
+        
+        [shaderString appendFormat:@"blurCoords = cc_FragTexCoord1.xy - singleStepOffset * %f;", optimizedOffset];
+        [shaderString appendString:@"compare = cc_FragTexCoord1Extents - abs(blurCoords - cc_FragTexCoord1Center);"];
+        [shaderString appendString:@"inBounds = step(0.0, min(compare.x, compare.y));"];
+        [shaderString appendFormat:@"sum += texture2D(cc_PreviousPassTexture, blurCoords) * inBounds * %f;\n", optimizedWeight];
+    }
+    
+    [shaderString appendString:@"\
+     return sum * inputValue;\n"];
+    
+    CCEffectFunctionInput *input = [[CCEffectFunctionInput alloc] initWithType:@"vec4" name:@"inputValue"];
+    return @[[[CCEffectFunction alloc] initWithName:@"blurEffect" body:shaderString inputs:@[input] returnType:@"vec4"]];
+#endif
 #endif
 }
 
