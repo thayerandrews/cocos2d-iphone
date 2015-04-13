@@ -99,6 +99,7 @@
 #import "CCEffectColorChannelOffset.h"
 #import "CCEffectContrast.h"
 #import "CCEffectBlur.h"
+#import "CCEffectBlurReference.h"
 #import "CCEffectGlass.h"
 #import "CCEffectDropShadow.h"
 #import "CCEffectHue.h"

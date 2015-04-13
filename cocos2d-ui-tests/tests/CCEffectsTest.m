@@ -326,6 +326,85 @@
 }
 #endif
 
+-(void)setupBlurReferenceEffectNodeTest
+{
+    self.subTitle = @"Blur Reference Effect Test";
+    
+    Class blurClass1 = [CCEffectBlur class];
+    Class blurClass2 = [CCEffectBlurReference class];
+
+    NSString *imageFile = @"Images/sample_hollow_circle.png";
+
+    float xPositions[] = { 0.1f, 0.233f, 0.366f, 0.5f, 0.633f, 0.766f, 0.9f };
+    int numXPositions = sizeof(xPositions) / sizeof(float);
+    
+    {
+        const float yPos = 0.8f;
+        for (int i = 0; i < numXPositions; i++)
+        {
+            float xPos = xPositions[i];
+            CCSprite *sprite = [self spriteWithEffects:@[] image:imageFile atPosition:ccp(xPos, yPos)];
+            [self.contentNode addChild:sprite];
+        }
+    }
+
+    {
+        // Different configurations of the saturation effect
+        NSArray *effects = @[
+                             [blurClass1 effectWithBlurRadius:0.0],
+                             [blurClass1 effectWithBlurRadius:1.0],
+                             [blurClass1 effectWithBlurRadius:2.0],
+                             [blurClass1 effectWithBlurRadius:3.0],
+                             [blurClass1 effectWithBlurRadius:4.0],
+                             [blurClass1 effectWithBlurRadius:8.0],
+                             [blurClass1 effectWithBlurRadius:16.0]
+                             ];
+        
+        
+        for (CCEffect *effect in effects)
+        {
+            effect.padding = CGSizeMake(32.0f, 32.0f);
+        }
+
+        const float yPos = 0.5f;
+        for (int i = 0; i < numXPositions; i++)
+        {
+            float xPos = xPositions[i];
+            CCSprite *sprite = [self spriteWithEffects:@[effects[i]] image:imageFile atPosition:ccp(xPos, yPos)];
+            [self.contentNode addChild:sprite];
+        }
+    }
+    
+    {
+        // Different configurations of the saturation effect
+        NSArray *effects = @[
+                             [blurClass2 effectWithBlurRadius:0.0],
+                             [blurClass2 effectWithBlurRadius:1.0],
+                             [blurClass2 effectWithBlurRadius:2.0],
+                             [blurClass2 effectWithBlurRadius:3.0],
+                             [blurClass2 effectWithBlurRadius:4.0],
+                             [blurClass2 effectWithBlurRadius:8.0],
+                             [blurClass2 effectWithBlurRadius:16.0]
+                             ];
+        
+        
+        for (CCEffect *effect in effects)
+        {
+            effect.padding = CGSizeMake(32.0f, 32.0f);
+        }
+        
+        const float yPos = 0.2f;
+        for (int i = 0; i < numXPositions; i++)
+        {
+            float xPos = xPositions[i];
+            CCSprite *sprite = [self spriteWithEffects:@[effects[i]] image:imageFile atPosition:ccp(xPos, yPos)];
+            [self.contentNode addChild:sprite];
+        }
+    }
+}
+
+
+
 -(void)setupSimpleLightingTest
 {
     self.subTitle = @"Simple Lighting Test";

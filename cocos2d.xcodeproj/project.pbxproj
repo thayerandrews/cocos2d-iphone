@@ -461,6 +461,12 @@
 		9D5E590C1AC1F4D100D87047 /* CCEffectShaderBuilderMetal.m in Sources */ = {isa = PBXBuildFile; fileRef = 9D5E59061AC1F4D100D87047 /* CCEffectShaderBuilderMetal.m */; };
 		9D69E6D619DF604800C2749C /* CCLightNode.h in Headers */ = {isa = PBXBuildFile; fileRef = 9D69E6D419DF604800C2749C /* CCLightNode.h */; };
 		9D69E6D719DF604800C2749C /* CCLightNode.m in Sources */ = {isa = PBXBuildFile; fileRef = 9D69E6D519DF604800C2749C /* CCLightNode.m */; };
+		9D6B81911AD6E46600F3EC80 /* CCEffectBlurReference.h in Headers */ = {isa = PBXBuildFile; fileRef = 9D6B818F1AD6E46600F3EC80 /* CCEffectBlurReference.h */; };
+		9D6B81921AD6E46600F3EC80 /* CCEffectBlurReference.h in Headers */ = {isa = PBXBuildFile; fileRef = 9D6B818F1AD6E46600F3EC80 /* CCEffectBlurReference.h */; };
+		9D6B81931AD6E46600F3EC80 /* CCEffectBlurReference.h in Headers */ = {isa = PBXBuildFile; fileRef = 9D6B818F1AD6E46600F3EC80 /* CCEffectBlurReference.h */; };
+		9D6B81941AD6E46600F3EC80 /* CCEffectBlurReference.m in Sources */ = {isa = PBXBuildFile; fileRef = 9D6B81901AD6E46600F3EC80 /* CCEffectBlurReference.m */; };
+		9D6B81951AD6E46600F3EC80 /* CCEffectBlurReference.m in Sources */ = {isa = PBXBuildFile; fileRef = 9D6B81901AD6E46600F3EC80 /* CCEffectBlurReference.m */; };
+		9D6B81961AD6E46600F3EC80 /* CCEffectBlurReference.m in Sources */ = {isa = PBXBuildFile; fileRef = 9D6B81901AD6E46600F3EC80 /* CCEffectBlurReference.m */; };
 		9D7932C21AC46E3300933BEF /* CCEffectParameterProtocol.h in Headers */ = {isa = PBXBuildFile; fileRef = 9D7932C11AC46E3200933BEF /* CCEffectParameterProtocol.h */; };
 		9D7932C31AC46E3300933BEF /* CCEffectParameterProtocol.h in Headers */ = {isa = PBXBuildFile; fileRef = 9D7932C11AC46E3200933BEF /* CCEffectParameterProtocol.h */; };
 		9D7932C41AC46E3300933BEF /* CCEffectParameterProtocol.h in Headers */ = {isa = PBXBuildFile; fileRef = 9D7932C11AC46E3200933BEF /* CCEffectParameterProtocol.h */; };
@@ -1343,6 +1349,8 @@
 		9D5E59061AC1F4D100D87047 /* CCEffectShaderBuilderMetal.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CCEffectShaderBuilderMetal.m; sourceTree = "<group>"; };
 		9D69E6D419DF604800C2749C /* CCLightNode.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CCLightNode.h; sourceTree = "<group>"; };
 		9D69E6D519DF604800C2749C /* CCLightNode.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CCLightNode.m; sourceTree = "<group>"; };
+		9D6B818F1AD6E46600F3EC80 /* CCEffectBlurReference.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CCEffectBlurReference.h; sourceTree = "<group>"; };
+		9D6B81901AD6E46600F3EC80 /* CCEffectBlurReference.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CCEffectBlurReference.m; sourceTree = "<group>"; };
 		9D7932C11AC46E3200933BEF /* CCEffectParameterProtocol.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CCEffectParameterProtocol.h; sourceTree = "<group>"; };
 		9D85671A191AE2CC00573093 /* CCEffectStack_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CCEffectStack_Private.h; sourceTree = "<group>"; };
 		9D85671B191B018200573093 /* CCEffectBrightness.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CCEffectBrightness.h; sourceTree = "<group>"; };
@@ -2132,6 +2140,8 @@
 				D268FE06198078FF00ECBCD0 /* CCEffectBloom.m */,
 				D3903B081995285B003AA81A /* CCEffectBlur.h */,
 				D3903B091995285B003AA81A /* CCEffectBlur.m */,
+				9D6B818F1AD6E46600F3EC80 /* CCEffectBlurReference.h */,
+				9D6B81901AD6E46600F3EC80 /* CCEffectBlurReference.m */,
 				9D85671B191B018200573093 /* CCEffectBrightness.h */,
 				9D85671C191B018200573093 /* CCEffectBrightness.m */,
 				9DBCA31219B68BE400EFE96D /* CCEffectColorChannelOffset.h */,
@@ -2685,6 +2695,7 @@
 				A6DC4E0918055DCC00C280A6 /* CCTransition.h in Headers */,
 				B798D14D18204BEC00E7BFCD /* CCParticleSystemBase_Private.h in Headers */,
 				D25B4F4B194A499700DA9D60 /* CCTouch.h in Headers */,
+				9D6B81911AD6E46600F3EC80 /* CCEffectBlurReference.h in Headers */,
 				D241610D1958F72B003673BD /* CCEffectSaturation.h in Headers */,
 				A0A7A53C1514F27D00C8BD16 /* CCActionCatmullRom.h in Headers */,
 				D268FE1D1980791400ECBCD0 /* CCEffectUtils.h in Headers */,
@@ -2855,6 +2866,7 @@
 				7A59470B19E372FE00F65F90 /* CCCache.h in Headers */,
 				7A59470D19E372FF00F65F90 /* CCRenderDispatch.h in Headers */,
 				7A59470F19E372FF00F65F90 /* CCRendererSharedTypes.h in Headers */,
+				9D6B81931AD6E46600F3EC80 /* CCEffectBlurReference.h in Headers */,
 				7A59471019E372FF00F65F90 /* CCRendererBasicTypes.h in Headers */,
 				7A59471119E372FF00F65F90 /* CCRendererBasicTypes_Private.h in Headers */,
 				7A59471319E3730000F65F90 /* CCShader.h in Headers */,
@@ -3042,6 +3054,7 @@
 				D2DDB09819805E8400233D80 /* CCMatrix4.h in Headers */,
 				D2FEB667194F6C9E00FC0574 /* CCGLView.h in Headers */,
 				D2FEB668194F6C9E00FC0574 /* CCActionProgressTimer.h in Headers */,
+				9D6B81921AD6E46600F3EC80 /* CCEffectBlurReference.h in Headers */,
 				D2FEB66B194F6C9E00FC0574 /* CCActionTween.h in Headers */,
 				9D5E59001AC1F0E700D87047 /* CCEffectStitcherMetal.h in Headers */,
 				BC9F4E9B19DB644E00B25F01 /* CCPackageDownload.h in Headers */,
@@ -3422,6 +3435,7 @@
 				503862E6110072BC005D2C92 /* CCDeviceInfo.m in Sources */,
 				14B84C951A700B55002C4D20 /* CCSetup.m in Sources */,
 				5015043C113300F900A9CA65 /* CCActionProgressTimer.m in Sources */,
+				9D6B81941AD6E46600F3EC80 /* CCEffectBlurReference.m in Sources */,
 				D37D197818B6665700B23FDE /* CCTiledMapLayer.m in Sources */,
 				D272032618FC89A000B100FF /* CCEffect.m in Sources */,
 				D2C755C91A63E3C000FC9105 /* CCViewMacGL.m in Sources */,
@@ -3520,6 +3534,7 @@
 				83E21C001A121EB5000D1695 /* CCPackageManager.m in Sources */,
 				7A59479719E3759800F65F90 /* CCEffectColorChannelOffset.m in Sources */,
 				7A59479919E3759900F65F90 /* CCEffectBlur.m in Sources */,
+				9D6B81961AD6E46600F3EC80 /* CCEffectBlurReference.m in Sources */,
 				7A59479B19E3759900F65F90 /* CCEffectRefraction.m in Sources */,
 				7A59479D19E3759900F65F90 /* CCEffectUtils.m in Sources */,
 				9D5E590C1AC1F4D100D87047 /* CCEffectShaderBuilderMetal.m in Sources */,
@@ -3714,6 +3729,7 @@
 				D2EC6039199D9F82001A15E9 /* CCRendererGLSupport.m in Sources */,
 				D27451C919B111A9006DA0A1 /* CCEffectDFOutline.m in Sources */,
 				D2FEB6DC194F6C9E00FC0574 /* CCEffectNode.m in Sources */,
+				9D6B81951AD6E46600F3EC80 /* CCEffectBlurReference.m in Sources */,
 				D2FEB6DD194F6C9E00FC0574 /* CCTiledMapObjectGroup.m in Sources */,
 				9DD4D1251AADF20100E5260A /* CCEffectShaderBuilder.m in Sources */,
 				D2FEB6DE194F6C9E00FC0574 /* CGPointExtension.m in Sources */,

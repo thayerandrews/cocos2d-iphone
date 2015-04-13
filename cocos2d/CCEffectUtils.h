@@ -14,9 +14,10 @@
 typedef struct CCEffectBlurParams
 {
     NSUInteger trueRadius;
-    NSUInteger radius;
-    NSUInteger numberOfOptimizedOffsets;
     GLfloat sigma;
+
+    NSUInteger trueNumberOfOptimizedOffsets;
+    NSUInteger numberOfOptimizedOffsets;
 
 } CCEffectBlurParams;
 
@@ -37,3 +38,4 @@ float CCEffectUtilsConditionFresnelPower(float power);
 void CCEffectUtilsPrintMatrix(NSString *label, GLKMatrix4 matrix);
 
 CCEffectBlurParams CCEffectUtilsComputeBlurParams(NSUInteger radius);
+GLfloat* CCEffectUtilsComputeGaussianWeightsWithBlurParams(CCEffectBlurParams params);
