@@ -37,3 +37,4 @@ float CCEffectUtilsConditionFresnelPower(float power);
 void CCEffectUtilsPrintMatrix(NSString *label, GLKMatrix4 matrix);
 
 CCEffectBlurParams CCEffectUtilsComputeBlurParams(NSUInteger radius);
+GLfloat* CCEffectUtilsComputeGaussianWeightsWithBlurParams(CCEffectBlurParams params);

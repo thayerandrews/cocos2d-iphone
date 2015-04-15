@@ -111,30 +111,8 @@
 
 + (NSArray *)buildFragmentFunctionsWithBlurParams:(CCEffectBlurParams)blurParams
 {
-    GLfloat *standardGaussianWeights = calloc(blurParams.trueRadius + 2, sizeof(GLfloat));
-    GLfloat sumOfWeights = 0.0;
-    for (NSUInteger currentGaussianWeightIndex = 0; currentGaussianWeightIndex < blurParams.trueRadius + 2; currentGaussianWeightIndex++)
-    {
-        standardGaussianWeights[currentGaussianWeightIndex] = (1.0 / sqrt(2.0 * M_PI * pow(blurParams.sigma, 2.0))) * exp(-pow(currentGaussianWeightIndex, 2.0) / (2.0 * pow(blurParams.sigma, 2.0)));
-        
-        if (currentGaussianWeightIndex == 0)
-        {
-            sumOfWeights += standardGaussianWeights[currentGaussianWeightIndex];
-        }
-        else
-        {
-            sumOfWeights += 2.0 * standardGaussianWeights[currentGaussianWeightIndex];
-        }
-    }
-    
-    // Next, normalize these weights to prevent the clipping of the Gaussian curve at the end of the discrete samples from reducing luminance
-    for (NSUInteger currentGaussianWeightIndex = 0; currentGaussianWeightIndex < blurParams.trueRadius + 2; currentGaussianWeightIndex++)
-    {
-        standardGaussianWeights[currentGaussianWeightIndex] = standardGaussianWeights[currentGaussianWeightIndex] / sumOfWeights;
-    }
-    
-    // From these weights we calculate the offsets to read interpolated values from
     NSUInteger trueNumberOfOptimizedOffsets = blurParams.trueRadius / 2;
+    GLfloat* standardGaussianWeights = CCEffectUtilsComputeGaussianWeightsWithBlurParams(blurParams);
     
     NSMutableString *shaderString = [[NSMutableString alloc] init];
     
@@ -206,27 +184,7 @@
 
 + (NSArray *)buildVertexFunctionsWithBlurParams:(CCEffectBlurParams)blurParams
 {
-    GLfloat* standardGaussianWeights = calloc(blurParams.trueRadius + 1, sizeof(GLfloat));
-    GLfloat sumOfWeights = 0.0;
-    for (NSUInteger currentGaussianWeightIndex = 0; currentGaussianWeightIndex < blurParams.trueRadius + 1; currentGaussianWeightIndex++)
-    {
-        standardGaussianWeights[currentGaussianWeightIndex] = (1.0 / sqrt(2.0 * M_PI * pow(blurParams.sigma, 2.0))) * exp(-pow(currentGaussianWeightIndex, 2.0) / (2.0 * pow(blurParams.sigma, 2.0)));
-        
-        if (currentGaussianWeightIndex == 0)
-        {
-            sumOfWeights += standardGaussianWeights[currentGaussianWeightIndex];
-        }
-        else
-        {
-            sumOfWeights += 2.0 * standardGaussianWeights[currentGaussianWeightIndex];
-        }
-    }
-    
-    // Next, normalize these weights to prevent the clipping of the Gaussian curve at the end of the discrete samples from reducing luminance
-    for (NSUInteger currentGaussianWeightIndex = 0; currentGaussianWeightIndex < blurParams.trueRadius + 1; currentGaussianWeightIndex++)
-    {
-        standardGaussianWeights[currentGaussianWeightIndex] = standardGaussianWeights[currentGaussianWeightIndex] / sumOfWeights;
-    }
+    GLfloat* standardGaussianWeights = CCEffectUtilsComputeGaussianWeightsWithBlurParams(blurParams);
     
     // From these weights we calculate the offsets to read interpolated values from
     GLfloat* optimizedGaussianOffsets = calloc(blurParams.numberOfOptimizedOffsets, sizeof(GLfloat));

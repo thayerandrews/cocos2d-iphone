@@ -219,4 +219,45 @@ CCEffectBlurParams CCEffectUtilsComputeBlurParams(NSUInteger radius)
     return result;
 }
 
+GLfloat* CCEffectUtilsComputeGaussianWeightsWithBlurParams(CCEffectBlurParams params)
+{
+    GLfloat *standardGaussianWeights = calloc(params.trueRadius + 1, sizeof(GLfloat));
+    GLfloat sumOfWeights = 0.0f;
+    
+    GLfloat sigmaSquared = params.sigma * params.sigma;
+    GLfloat gaussianTerm1 = (1.0f / (sqrt(2.0f * M_PI) * params.sigma));
+    
+    if (params.trueRadius >= 1)
+    {
+        for (NSUInteger currentGaussianWeightIndex = 0; currentGaussianWeightIndex < params.trueRadius + 1; currentGaussianWeightIndex++)
+        {
+            GLfloat indexSquared = currentGaussianWeightIndex * currentGaussianWeightIndex;
+            GLfloat gaussianTerm2 = exp(-indexSquared / (2.0f * sigmaSquared));
+            GLfloat gaussianWeight = gaussianTerm1 * gaussianTerm2;
+            
+            standardGaussianWeights[currentGaussianWeightIndex] = gaussianWeight;
+            if (currentGaussianWeightIndex == 0)
+            {
+                sumOfWeights += gaussianWeight;
+            }
+            else
+            {
+                sumOfWeights += 2.0f * gaussianWeight;
+            }
+        }
+    }
+    else
+    {
+        standardGaussianWeights[0] = 1.0f;
+        sumOfWeights = 1.0f;
+    }
+    
+    // Next, normalize these weights to prevent the clipping of the Gaussian curve at the end of the discrete samples from reducing luminance
+    for (NSUInteger currentGaussianWeightIndex = 0; currentGaussianWeightIndex < params.trueRadius + 1; currentGaussianWeightIndex++)
+    {
+        standardGaussianWeights[currentGaussianWeightIndex] = standardGaussianWeights[currentGaussianWeightIndex] / sumOfWeights;
+    }
+    
+    return standardGaussianWeights;
+}
 
