@@ -207,6 +207,23 @@ CCEffectBlurParams CCEffectUtilsComputeBlurParams(NSUInteger radius)
 {
     CCEffectBlurParams result;
     
+#ifdef IMPROVED_SIGMA_CALCULATION
+    NSUInteger calculatedSampleRadius = 0;
+    if (radius >= 1)
+    {
+        NSUInteger radiusSquared = radius * radius;
+        
+        CGFloat minimumWeightToFindEdgeOfSamplingArea = 1.0f / 256.0f;
+        calculatedSampleRadius = floor(sqrt(-2.0 * radiusSquared * log(minimumWeightToFindEdgeOfSamplingArea * sqrt(2.0 * M_PI * radiusSquared))));
+        calculatedSampleRadius += calculatedSampleRadius % 2;
+    }
+    
+    result.trueRadius = calculatedSampleRadius;
+    result.sigma = radius;
+    
+    result.trueNumberOfOptimizedOffsets = ((calculatedSampleRadius / 2) + (calculatedSampleRadius % 2));
+    result.numberOfOptimizedOffsets = MIN(result.trueNumberOfOptimizedOffsets, BLUR_OPTIMIZED_RADIUS_MAX);
+#else
     result.trueRadius = radius;
     result.radius = MIN(radius, BLUR_OPTIMIZED_RADIUS_MAX);
     result.sigma = result.trueRadius / 2;
@@ -216,6 +233,7 @@ CCEffectBlurParams CCEffectUtilsComputeBlurParams(NSUInteger radius)
     }
     result.numberOfOptimizedOffsets = MIN(result.radius / 2 + (result.radius % 2), BLUR_OPTIMIZED_RADIUS_MAX);
     result.trueNumberOfOptimizedOffsets = result.trueRadius / 2;
+#endif    
     return result;
 }
 
