@@ -63,7 +63,7 @@
                           ];
     
     return [[CCEffectShaderBuilderGL alloc] initWithType:CCEffectShaderBuilderFragment
-                                               functions:functions
+                                               functions:[[CCEffectShaderBuilderGL defaultFragmentFunctions] arrayByAddingObjectsFromArray:functions]
                                                    calls:calls
                                              temporaries:temporaries
                                                 uniforms:uniforms
@@ -76,21 +76,21 @@
 
     // Image pixellation shader based on pixellation filter in GPUImage - https://github.com/BradLarson/GPUImage
     NSString* effectBody = CC_GLSL(
-                                   vec2 redSamplePos = cc_FragTexCoord1 + u_redOffset;
-                                   vec2 redCompare = cc_FragTexCoord1Extents - abs(redSamplePos - cc_FragTexCoord1Center);
-                                   float redInBounds = step(0.0, min(redCompare.x, redCompare.y));
-                                   vec4 redSample = inputValue * texture2D(cc_PreviousPassTexture, redSamplePos) * redInBounds;
-
-                                   vec2 greenSamplePos = cc_FragTexCoord1 + u_greenOffset;
-                                   vec2 greenCompare = cc_FragTexCoord1Extents - abs(greenSamplePos - cc_FragTexCoord1Center);
-                                   float greenInBounds = step(0.0, min(greenCompare.x, greenCompare.y));
-                                   vec4 greenSample = inputValue * texture2D(cc_PreviousPassTexture, greenSamplePos) * greenInBounds;
-
-                                   vec2 blueSamplePos = cc_FragTexCoord1 + u_blueOffset;
-                                   vec2 blueCompare = cc_FragTexCoord1Extents - abs(blueSamplePos - cc_FragTexCoord1Center);
-                                   float blueInBounds = step(0.0, min(blueCompare.x, blueCompare.y));
-                                   vec4 blueSample = inputValue * texture2D(cc_PreviousPassTexture, blueSamplePos) * blueInBounds;
+                                   vec4 redSample   = inputValue * CCEffectSampleWithBounds(cc_FragTexCoord1 + u_redOffset,
+                                                                                            cc_FragTexCoord1Center,
+                                                                                            cc_FragTexCoord1Extents,
+                                                                                            cc_PreviousPassTexture);
                                    
+                                   vec4 greenSample = inputValue * CCEffectSampleWithBounds(cc_FragTexCoord1 + u_greenOffset,
+                                                                                            cc_FragTexCoord1Center,
+                                                                                            cc_FragTexCoord1Extents,
+                                                                                            cc_PreviousPassTexture);
+                                   
+                                   vec4 blueSample  = inputValue * CCEffectSampleWithBounds(cc_FragTexCoord1 + u_blueOffset,
+                                                                                            cc_FragTexCoord1Center,
+                                                                                            cc_FragTexCoord1Extents,
+                                                                                            cc_PreviousPassTexture);
+
                                    return vec4(redSample.r, greenSample.g, blueSample.b, max(max(redSample.a, greenSample.a), blueSample.a));
                                    );
     
@@ -173,7 +173,7 @@ typedef struct CCEffectColorChannelOffsetParameters
 {
     NSArray *functions = [CCEffectColorChannelOffsetImplMetal buildFragmentFunctions];
     NSArray *temporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"half4" name:@"tmp" initializer:CCEffectInitFragColor]];
-    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[1] outputName:@"colorOffset" inputs:@{@"cc_FragIn" : @"cc_FragIn",
+    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[0] outputName:@"colorOffset" inputs:@{@"cc_FragIn" : @"cc_FragIn",
                                                                                                                       @"cc_PreviousPassTexture" : @"cc_PreviousPassTexture",
                                                                                                                       @"cc_PreviousPassTextureSampler" : @"cc_PreviousPassTextureSampler",
                                                                                                                       @"cc_FragTexCoordDimensions" : @"cc_FragTexCoordDimensions",
@@ -194,7 +194,7 @@ typedef struct CCEffectColorChannelOffsetParameters
                          ];
     
     return [[CCEffectShaderBuilderMetal alloc] initWithType:CCEffectShaderBuilderFragment
-                                                  functions:functions
+                                                  functions:[[CCEffectShaderBuilderMetal defaultFragmentFunctions] arrayByAddingObjectsFromArray:functions]
                                                       calls:calls
                                                 temporaries:temporaries
                                                   arguments:[[CCEffectShaderBuilderMetal defaultFragmentArguments] arrayByAddingObjectsFromArray:arguments]
@@ -203,23 +203,6 @@ typedef struct CCEffectColorChannelOffsetParameters
 
 + (NSArray *)buildFragmentFunctions
 {
-    NSArray *offsetSampleInputs = @[
-                                    [[CCEffectFunctionInput alloc] initWithType:@"float2" name:@"texCoord"],
-                                    [[CCEffectFunctionInput alloc] initWithType:@"float2" name:@"offset"],
-                                    [[CCEffectFunctionInput alloc] initWithType:@"float2" name:@"texCoordCenter"],
-                                    [[CCEffectFunctionInput alloc] initWithType:@"float2" name:@"texCoordExtents"],
-                                    [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:@"inputTexture"],
-                                    [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:@"inputSampler"]
-                                    ];
-    NSString *offsetSampleBody = CC_GLSL(
-                                         float2 samplePos = texCoord + offset;
-                                         float2 compare = texCoordExtents - abs(samplePos - texCoordCenter);
-                                         float inBounds = step(0.0, min(compare.x, compare.y));
-                                         return inputTexture.sample(inputSampler, samplePos) * inBounds;
-                                         );
-    CCEffectFunction* offsetSampleFunction = [[CCEffectFunction alloc] initWithName:@"offsetSample" body:offsetSampleBody inputs:offsetSampleInputs returnType:@"half4"];
-
-    
     NSArray *effectInputs = @[
                               [[CCEffectFunctionInput alloc] initWithType:@"const CCFragData" name:CCShaderArgumentFragIn],
                               [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:CCShaderUniformPreviousPassTexture],
@@ -229,33 +212,27 @@ typedef struct CCEffectColorChannelOffsetParameters
                               [[CCEffectFunctionInput alloc] initWithType:@"half4" name:@"inputValue"]
                               ];
     NSString *effectBody = CC_GLSL(
-                                   half4 redSample = inputValue * offsetSample(cc_FragIn.texCoord1,
-                                                                               offsets->redOffset,
-                                                                               cc_FragTexCoordDimensions->texCoord1Center,
-                                                                               cc_FragTexCoordDimensions->texCoord1Extents,
-                                                                               cc_PreviousPassTexture,
-                                                                               cc_PreviousPassTextureSampler);
+                                   half4 redSample = inputValue * CCEffectSampleWithBounds(cc_FragIn.texCoord1 + offsets->redOffset,
+                                                                                           cc_FragTexCoordDimensions->texCoord1Center,
+                                                                                           cc_FragTexCoordDimensions->texCoord1Extents,
+                                                                                           cc_PreviousPassTexture,
+                                                                                           cc_PreviousPassTextureSampler);
                                    
-                                   half4 greenSample = inputValue * offsetSample(cc_FragIn.texCoord1,
-                                                                                 offsets->greenOffset,
-                                                                                 cc_FragTexCoordDimensions->texCoord1Center,
-                                                                                 cc_FragTexCoordDimensions->texCoord1Extents,
-                                                                                 cc_PreviousPassTexture,
-                                                                                 cc_PreviousPassTextureSampler);
+                                   half4 greenSample = inputValue * CCEffectSampleWithBounds(cc_FragIn.texCoord1 + offsets->greenOffset,
+                                                                                             cc_FragTexCoordDimensions->texCoord1Center,
+                                                                                             cc_FragTexCoordDimensions->texCoord1Extents,
+                                                                                             cc_PreviousPassTexture,
+                                                                                             cc_PreviousPassTextureSampler);
                                    
-                                   half4 blueSample = inputValue * offsetSample(cc_FragIn.texCoord1,
-                                                                                offsets->blueOffset,
-                                                                                cc_FragTexCoordDimensions->texCoord1Center,
-                                                                                cc_FragTexCoordDimensions->texCoord1Extents,
-                                                                                cc_PreviousPassTexture,
-                                                                                cc_PreviousPassTextureSampler);
+                                   half4 blueSample = inputValue * CCEffectSampleWithBounds(cc_FragIn.texCoord1 + offsets->blueOffset,
+                                                                                            cc_FragTexCoordDimensions->texCoord1Center,
+                                                                                            cc_FragTexCoordDimensions->texCoord1Extents,
+                                                                                            cc_PreviousPassTexture,
+                                                                                            cc_PreviousPassTextureSampler);
                                    
                                    return half4(redSample.r, greenSample.g, blueSample.b, max(max(redSample.a, greenSample.a), blueSample.a));
                                    );
-    CCEffectFunction *effectFunction = [[CCEffectFunction alloc] initWithName:@"colorChannelOffset" body:effectBody inputs:effectInputs returnType:@"half4"];
-
-    
-    return @[ offsetSampleFunction, effectFunction ];
+    return @[[[CCEffectFunction alloc] initWithName:@"colorChannelOffset" body:effectBody inputs:effectInputs returnType:@"half4"]];
 }
 
 + (NSArray *)buildRenderPassesWithInterface:(CCEffectColorChannelOffset *)interface

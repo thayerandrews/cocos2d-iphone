@@ -168,6 +168,25 @@ static NSString * const CCEffectTexCoordDimensionsStruct = @"CCEffectTexCoordDim
 
 }
 
++ (NSArray *)defaultFragmentFunctions
+{
+    NSArray *sampleWithBoundsInputs = @[
+                                        [[CCEffectFunctionInput alloc] initWithType:@"float2" name:@"texCoord"],
+                                        [[CCEffectFunctionInput alloc] initWithType:@"float2" name:@"texCoordCenter"],
+                                        [[CCEffectFunctionInput alloc] initWithType:@"float2" name:@"texCoordExtents"],
+                                        [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:@"inputTexture"],
+                                        [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:@"inputSampler"]
+                                        ];
+    NSString *sampleWithBoundsBody = CC_GLSL(
+                                             float2 samplePos = texCoord;
+                                             float2 compare = texCoordExtents - abs(samplePos - texCoordCenter);
+                                             float inBounds = step(0.0, min(compare.x, compare.y));
+                                             return inputTexture.sample(inputSampler, samplePos) * inBounds;
+                                             );
+    CCEffectFunction* sampleWithBoundsFunction = [[CCEffectFunction alloc] initWithName:@"CCEffectSampleWithBounds" body:sampleWithBoundsBody inputs:sampleWithBoundsInputs returnType:@"half4"];
+    return @[sampleWithBoundsFunction];
+}
+
 + (CCEffectShaderBuilder *)defaultVertexShaderBuilder
 {
     static dispatch_once_t once;

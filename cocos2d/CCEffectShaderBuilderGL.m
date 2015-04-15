@@ -87,6 +87,24 @@ static NSString * const fragTemplate =
                                           ]];
 }
 
++ (NSArray *)defaultFragmentFunctions
+{
+    NSArray *sampleWithBoundsInputs = @[
+                                        [[CCEffectFunctionInput alloc] initWithType:@"vec2" name:@"texCoord"],
+                                        [[CCEffectFunctionInput alloc] initWithType:@"vec2" name:@"texCoordCenter"],
+                                        [[CCEffectFunctionInput alloc] initWithType:@"vec2" name:@"texCoordExtents"],
+                                        [[CCEffectFunctionInput alloc] initWithType:@"sampler2D" name:@"inputTexture"],
+                                        ];
+    NSString *sampleWithBoundsBody = CC_GLSL(
+                                             vec2 compare = texCoordExtents - abs(texCoord - texCoordCenter);
+                                             float inBounds = step(0.0, min(compare.x, compare.y));
+                                             return texture2D(inputTexture, texCoord) * inBounds;
+                                             );
+    CCEffectFunction* sampleWithBoundsFunction = [[CCEffectFunction alloc] initWithName:@"CCEffectSampleWithBounds" body:sampleWithBoundsBody inputs:sampleWithBoundsInputs returnType:@"vec4"];
+    
+    return @[sampleWithBoundsFunction];
+}
+
 + (CCEffectShaderBuilder *)defaultVertexShaderBuilder
 {
     static dispatch_once_t once;
@@ -137,6 +155,14 @@ static NSString * const fragTemplate =
     {
         [shaderString appendFormat:@"%@\n", varying.declaration];
     }
+    
+    // Output function declarations
+    [shaderString appendString:@"\n// Function declarations\n\n"];
+    for(CCEffectFunction* function in functions)
+    {
+        [shaderString appendFormat:@"%@;\n", function.declaration];
+    }
+    [shaderString appendString:@"\n"];
     
     // Output function definitions
     [shaderString appendString:@"\n// Function definitions\n\n"];

@@ -85,7 +85,7 @@
                               ];
     
     CCEffectShaderBuilder *fragShaderBuilder = [[CCEffectShaderBuilderGL alloc] initWithType:CCEffectShaderBuilderFragment
-                                                                                   functions:fragFunctions
+                                                                                   functions:[[CCEffectShaderBuilderGL defaultFragmentFunctions] arrayByAddingObjectsFromArray:fragFunctions]
                                                                                        calls:fragCalls
                                                                                  temporaries:fragTemporaries
                                                                                     uniforms:fragUniforms
@@ -131,8 +131,6 @@
     [shaderString appendFormat:@"\
      lowp vec4 src = vec4(0.0);\n\
      lowp vec4 dst = vec4(0.0);\n\
-     vec2 compare;\n\
-     float inBounds;\n\
      vec2 blurCoords;\
      "];
     
@@ -142,11 +140,9 @@
     [shaderString appendString:@"vec4 srcPixel; float luminanceCheck;\n"];
 
     // Inner texture loop
-    [shaderString appendString:@"compare = cc_FragTexCoord1Extents - abs(v_blurCoordinates[0] - cc_FragTexCoord1Center);"];
-    [shaderString appendString:@"inBounds = step(0.0, min(compare.x, compare.y));"];
-    [shaderString appendFormat:@"srcPixel = texture2D(cc_PreviousPassTexture, v_blurCoordinates[0]);\n"];
+    [shaderString appendFormat:@"srcPixel = CCEffectSampleWithBounds(v_blurCoordinates[0], cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture);\n"];
     [shaderString appendString:@"luminanceCheck = step(u_luminanceThreshold, dot(srcPixel.rgb, luminanceWeighting));\n"];
-    [shaderString appendFormat:@"src += inBounds * luminanceCheck * srcPixel * %f;\n", (blurParams.trueRadius == 0) ? 1.0 : standardGaussianWeights[0]];
+    [shaderString appendFormat:@"src += luminanceCheck * srcPixel * %f;\n", (blurParams.trueRadius == 0) ? 1.0 : standardGaussianWeights[0]];
     
     for (NSUInteger currentBlurCoordinateIndex = 0; currentBlurCoordinateIndex < blurParams.numberOfOptimizedOffsets; currentBlurCoordinateIndex++)
     {
@@ -155,18 +151,14 @@
         GLfloat optimizedWeight = firstWeight + secondWeight;
 
         [shaderString appendFormat:@"blurCoords = v_blurCoordinates[%lu];", (unsigned long)((currentBlurCoordinateIndex * 2) + 1)];
-        [shaderString appendString:@"compare = cc_FragTexCoord1Extents - abs(blurCoords - cc_FragTexCoord1Center);"];
-        [shaderString appendString:@"inBounds = step(0.0, min(compare.x, compare.y));"];
-        [shaderString appendFormat:@"srcPixel = texture2D(cc_PreviousPassTexture, blurCoords);\n"];
+        [shaderString appendFormat:@"srcPixel = CCEffectSampleWithBounds(blurCoords, cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture);\n"];
         [shaderString appendString:@"luminanceCheck = step(u_luminanceThreshold, dot(srcPixel.rgb, luminanceWeighting));\n"];
-        [shaderString appendFormat:@"src += inBounds * luminanceCheck * srcPixel * %f;\n", optimizedWeight];
+        [shaderString appendFormat:@"src += luminanceCheck * srcPixel * %f;\n", optimizedWeight];
 
         [shaderString appendFormat:@"blurCoords = v_blurCoordinates[%lu];", (unsigned long)((currentBlurCoordinateIndex * 2) + 2)];
-        [shaderString appendString:@"compare = cc_FragTexCoord1Extents - abs(blurCoords - cc_FragTexCoord1Center);"];
-        [shaderString appendString:@"inBounds = step(0.0, min(compare.x, compare.y));"];
-        [shaderString appendFormat:@"srcPixel = texture2D(cc_PreviousPassTexture, blurCoords);\n"];
+        [shaderString appendFormat:@"srcPixel = CCEffectSampleWithBounds(blurCoords, cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture);\n"];
         [shaderString appendString:@"luminanceCheck = step(u_luminanceThreshold, dot(srcPixel.rgb, luminanceWeighting));\n"];
-        [shaderString appendFormat:@"src += inBounds * luminanceCheck * srcPixel * %f;\n", optimizedWeight];
+        [shaderString appendFormat:@"src += luminanceCheck * srcPixel * %f;\n", optimizedWeight];
     }
     
     // If the number of required samples exceeds the amount we can pass in via varyings, we have to do dependent texture reads in the fragment shader
@@ -183,25 +175,21 @@
             GLfloat optimizedOffset = (firstWeight * (currentOverlowTextureRead * 2 + 1) + secondWeight * (currentOverlowTextureRead * 2 + 2)) / optimizedWeight;
 
             [shaderString appendFormat:@"blurCoords = v_blurCoordinates[0] + singleStepOffset * %f;\n", optimizedOffset];
-            [shaderString appendString:@"compare = cc_FragTexCoord1Extents - abs(blurCoords - cc_FragTexCoord1Center);"];
-            [shaderString appendString:@"inBounds = step(0.0, min(compare.x, compare.y));"];
-            [shaderString appendFormat:@"srcPixel = texture2D(cc_PreviousPassTexture, blurCoords);\n"];
+            [shaderString appendFormat:@"srcPixel = CCEffectSampleWithBounds(blurCoords, cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture);\n"];
             [shaderString appendString:@"luminanceCheck = step(u_luminanceThreshold, dot(srcPixel.rgb, luminanceWeighting));\n"];
-            [shaderString appendFormat:@"src += inBounds * luminanceCheck * srcPixel * %f;\n", optimizedWeight];
+            [shaderString appendFormat:@"src += luminanceCheck * srcPixel * %f;\n", optimizedWeight];
 
             [shaderString appendFormat:@"blurCoords = v_blurCoordinates[0] - singleStepOffset * %f;\n", optimizedOffset];
-            [shaderString appendString:@"compare = cc_FragTexCoord1Extents - abs(blurCoords - cc_FragTexCoord1Center);"];
-            [shaderString appendString:@"inBounds = step(0.0, min(compare.x, compare.y));"];
-            [shaderString appendFormat:@"srcPixel = texture2D(cc_PreviousPassTexture, blurCoords);\n"];
+            [shaderString appendFormat:@"srcPixel = CCEffectSampleWithBounds(blurCoords, cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture);\n"];
             [shaderString appendString:@"luminanceCheck = step(u_luminanceThreshold, dot(srcPixel.rgb, luminanceWeighting));\n"];
-            [shaderString appendFormat:@"src += inBounds * luminanceCheck * srcPixel * %f;\n", optimizedWeight];
+            [shaderString appendFormat:@"src += luminanceCheck * srcPixel * %f;\n", optimizedWeight];
         }
     }
     
     [shaderString appendString:@"} else {\n"];
     [shaderString appendString:@"\
-        compare = cc_FragTexCoord2Extents - abs(cc_FragTexCoord2 - cc_FragTexCoord2Center); \
-        inBounds = step(0.0, min(compare.x, compare.y)); \
+        vec2 compare = cc_FragTexCoord2Extents - abs(cc_FragTexCoord2 - cc_FragTexCoord2Center); \
+        float inBounds = step(0.0, min(compare.x, compare.y)); \
         dst = inputValue * texture2D(cc_MainTexture, cc_FragTexCoord2) * inBounds;\
         src = inputValue * texture2D(cc_PreviousPassTexture, cc_FragTexCoord1);\
      }\n"];

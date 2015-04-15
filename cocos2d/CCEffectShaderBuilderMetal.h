@@ -22,6 +22,7 @@
 + (NSArray *)defaultFragmentArguments;
 + (NSSet *)defaultStructNames;
 + (NSArray *)defaultStructDeclarations;
++ (NSArray *)defaultFragmentFunctions;
 + (CCEffectShaderBuilder *)defaultVertexShaderBuilder;
 
 @end
