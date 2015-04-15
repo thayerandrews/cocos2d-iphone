@@ -16,6 +16,7 @@ typedef struct CCEffectBlurParams
     NSUInteger trueRadius;
     NSUInteger radius;
     NSUInteger numberOfOptimizedOffsets;
+    NSUInteger trueNumberOfOptimizedOffsets;
     GLfloat sigma;
 
 } CCEffectBlurParams;

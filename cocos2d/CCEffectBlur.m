@@ -111,7 +111,6 @@
 
 + (NSArray *)buildFragmentFunctionsWithBlurParams:(CCEffectBlurParams)blurParams
 {
-    NSUInteger trueNumberOfOptimizedOffsets = blurParams.trueRadius / 2;
     GLfloat* standardGaussianWeights = CCEffectUtilsComputeGaussianWeightsWithBlurParams(blurParams);
     
     NSMutableString *shaderString = [[NSMutableString alloc] init];
@@ -148,11 +147,11 @@
     }
     
     // If the number of required samples exceeds the amount we can pass in via varyings, we have to do dependent texture reads in the fragment shader
-    if (trueNumberOfOptimizedOffsets > blurParams.numberOfOptimizedOffsets)
+    if (blurParams.trueNumberOfOptimizedOffsets > blurParams.numberOfOptimizedOffsets)
     {
         [shaderString appendString:@"highp vec2 singleStepOffset = u_blurDirection;\n"];
         
-        for (NSUInteger currentOverlowTextureRead = blurParams.numberOfOptimizedOffsets; currentOverlowTextureRead < trueNumberOfOptimizedOffsets; currentOverlowTextureRead++)
+        for (NSUInteger currentOverlowTextureRead = blurParams.numberOfOptimizedOffsets; currentOverlowTextureRead < blurParams.trueNumberOfOptimizedOffsets; currentOverlowTextureRead++)
         {
             GLfloat firstWeight = standardGaussianWeights[currentOverlowTextureRead * 2 + 1];
             GLfloat secondWeight = standardGaussianWeights[currentOverlowTextureRead * 2 + 2];

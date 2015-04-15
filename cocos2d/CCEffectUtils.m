@@ -215,7 +215,7 @@ CCEffectBlurParams CCEffectUtilsComputeBlurParams(NSUInteger radius)
         result.sigma = 1.0f;
     }
     result.numberOfOptimizedOffsets = MIN(result.radius / 2 + (result.radius % 2), BLUR_OPTIMIZED_RADIUS_MAX);
-
+    result.trueNumberOfOptimizedOffsets = result.trueRadius / 2;
     return result;
 }
 
