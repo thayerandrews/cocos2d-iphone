@@ -42,12 +42,15 @@
 #import "CCEffectBlur.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
+#import "CCEffectShaderBuilderMetal.h"
 #import "CCEffectUtils.h"
 #import "CCEffect_Private.h"
+#import "CCRenderer.h"
+#import "CCSetup.h"
 #import "CCTexture.h"
-#import "CCRendererBasicTypes.h"
-#import "NSValue+CCRenderer.h"
 
+
+#pragma mark - CCEffectBlurImplGL
 
 @interface CCEffectBlurImplGL : CCEffectImpl
 @property (nonatomic, weak) CCEffectBlur *interface;
@@ -252,6 +255,264 @@
 @end
 
 
+#pragma mark - CCEffectBlurImplMetal
+
+@interface CCEffectBlurImplMetal : CCEffectImpl
+@property (nonatomic, weak) CCEffectBlur *interface;
+@end
+
+@implementation CCEffectBlurImplMetal
+
+-(id)initWithInterface:(CCEffectBlur *)interface
+{
+    CCEffectBlurParams blurParams = CCEffectUtilsComputeBlurParams(interface.blurRadius, CCEffectBlurOptNone);
+
+    NSArray *renderPasses = [CCEffectBlurImplMetal buildRenderPasses];
+    NSArray *shaders =  [CCEffectBlurImplMetal buildShadersWithBlurParams:blurParams];
+    
+    if((self = [super initWithRenderPasses:renderPasses shaders:shaders]))
+    {
+        self.interface = interface;
+        self.debugName = @"CCEffectBlurImplGL";
+        self.stitchFlags = 0;
+        return self;
+    }
+    
+    return self;
+}
+
++ (NSArray *)buildStructDeclarationsWithBlurParams:(CCEffectBlurParams)blurParams
+{
+    NSString* structBlurFragData =
+    @"float4 position [[position]];\n"
+    @"float2 texCoord1;\n"
+    @"float2 texCoord2;\n"
+    @"half4  color;\n";
+
+    for (int i = 0; i < 2 * blurParams.numberOfOptimizedOffsets; i++)
+    {
+        structBlurFragData = [structBlurFragData stringByAppendingFormat:@"float2 blurCoordinates%d;\n", i+1];
+    }
+
+    return @[
+             [[CCEffectShaderStructDeclaration alloc] initWithName:@"CCEffectBlurFragData" body:structBlurFragData],
+             ];
+}
+
++ (NSArray *)buildShadersWithBlurParams:(CCEffectBlurParams)blurParams
+{
+    CCEffectShaderBuilder *vertexShaderBuiler = [CCEffectBlurImplMetal vertexShaderBuilderWithBlurParams:blurParams];
+    CCEffectShaderBuilder *fragmentShaderBuiler = [CCEffectBlurImplMetal fragmentShaderBuilderWithBlurParams:blurParams];
+    return @[[[CCEffectShader alloc] initWithVertexShaderBuilder:vertexShaderBuiler fragmentShaderBuilder:fragmentShaderBuiler]];
+}
+
++ (CCEffectShaderBuilder *)fragmentShaderBuilderWithBlurParams:(CCEffectBlurParams)blurParams
+{
+    NSArray *functions = [CCEffectBlurImplMetal buildFragmentFunctionsWithBlurParams:blurParams];
+    NSArray *temporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"half4" name:@"tmp" initializer:CCEffectInitFragColor]];
+    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[1] outputName:@"blurredResult" inputs:@{@"cc_FragIn" : @"cc_FragIn",
+                                                                                                                        @"cc_PreviousPassTexture" : @"cc_PreviousPassTexture",
+                                                                                                                        @"cc_PreviousPassTextureSampler" : @"cc_PreviousPassTextureSampler",
+                                                                                                                        @"cc_FragTexCoordDimensions" : @"cc_FragTexCoordDimensions",
+                                                                                                                        @"blurDirection" : @"blurDirection",
+                                                                                                                        @"inputValue" : @"tmp"
+                                                                                                                        }]];
+    
+    
+    NSArray *arguments = @[
+                           [[CCEffectShaderArgument alloc] initWithType:@"const CCEffectBlurFragData" name:CCShaderArgumentFragIn qualifier:CCEffectShaderArgumentStageIn],
+                           [[CCEffectShaderArgument alloc] initWithType:@"texture2d<half>" name:CCShaderUniformPreviousPassTexture qualifier:CCEffectShaderArgumentTexture],
+                           [[CCEffectShaderArgument alloc] initWithType:@"sampler" name:CCShaderUniformPreviousPassTextureSampler qualifier:CCEffectShaderArgumentSampler],
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device CCEffectTexCoordDimensions*" name:CCShaderArgumentTexCoordDimensions qualifier:CCEffectShaderArgumentBuffer],
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device float2&" name:@"blurDirection" qualifier:CCEffectShaderArgumentBuffer]
+                           ];
+    
+    NSArray *structs = [CCEffectBlurImplMetal buildStructDeclarationsWithBlurParams:blurParams];
+
+    return [[CCEffectShaderBuilderMetal alloc] initWithType:CCEffectShaderBuilderFragment
+                                                  functions:functions
+                                                      calls:calls
+                                                temporaries:temporaries
+                                                  arguments:arguments
+                                                    structs:[[CCEffectShaderBuilderMetal defaultStructDeclarations] arrayByAddingObjectsFromArray:structs]];
+}
+
++ (NSArray *)buildFragmentFunctionsWithBlurParams:(CCEffectBlurParams)blurParams
+{
+    NSArray *sampleWithBoundsInputs = @[
+                                        [[CCEffectFunctionInput alloc] initWithType:@"float2" name:@"texCoord"],
+                                        [[CCEffectFunctionInput alloc] initWithType:@"float2" name:@"texCoordCenter"],
+                                        [[CCEffectFunctionInput alloc] initWithType:@"float2" name:@"texCoordExtents"],
+                                        [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:@"inputTexture"],
+                                        [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:@"inputSampler"]
+                                        ];
+    NSString *sampleWithBoundsBody = CC_GLSL(
+                                             float2 compare = texCoordExtents - abs(texCoord - texCoordCenter);
+                                             float inBounds = step(0.0, min(compare.x, compare.y));
+                                             return inputTexture.sample(inputSampler, texCoord) * inBounds;
+                                             );
+    CCEffectFunction* sampleWithBoundsFunction = [[CCEffectFunction alloc] initWithName:@"sampleWithBounds" body:sampleWithBoundsBody inputs:sampleWithBoundsInputs returnType:@"half4"];
+
+    
+    
+    GLfloat* standardGaussianWeights = CCEffectUtilsComputeGaussianWeightsWithBlurParams(blurParams);
+    
+    NSMutableString *shaderString = [[NSMutableString alloc] init];
+    
+    // Header
+    [shaderString appendFormat:@"\
+     half4 sum = half4(0);\n\
+     "];
+    
+    // Inner texture loop
+    [shaderString appendFormat:@"sum += sampleWithBounds(cc_FragIn.texCoord1, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler) * %f;\n", standardGaussianWeights[0]];
+    
+    for (NSUInteger currentBlurCoordinateIndex = 0; currentBlurCoordinateIndex < blurParams.numberOfOptimizedOffsets; currentBlurCoordinateIndex++)
+    {
+        [shaderString appendFormat:@"sum += sampleWithBounds(cc_FragIn.blurCoordinates%lu, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler) * %f;\n", (unsigned long)((currentBlurCoordinateIndex * 2) + 1), standardGaussianWeights[currentBlurCoordinateIndex+1]];
+        [shaderString appendFormat:@"sum += sampleWithBounds(cc_FragIn.blurCoordinates%lu, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler) * %f;\n", (unsigned long)((currentBlurCoordinateIndex * 2) + 2), standardGaussianWeights[currentBlurCoordinateIndex+1]];
+    }
+    
+    // If the number of required samples exceeds the amount we can pass in via varyings, we have to do dependent texture reads in the fragment shader
+    if (blurParams.trueNumberOfOptimizedOffsets > blurParams.numberOfOptimizedOffsets)
+    {
+        [shaderString appendString:@"float2 singleStepOffset = blurDirection;\n"];
+        
+        for (NSUInteger currentOverlowTextureRead = blurParams.numberOfOptimizedOffsets; currentOverlowTextureRead < blurParams.trueNumberOfOptimizedOffsets; currentOverlowTextureRead++)
+        {
+            [shaderString appendFormat:@"sum += sampleWithBounds(cc_FragIn.texCoord1 + singleStepOffset * %f, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler) * %f;\n", (float)(currentOverlowTextureRead+1), standardGaussianWeights[currentOverlowTextureRead+1]];
+            [shaderString appendFormat:@"sum += sampleWithBounds(cc_FragIn.texCoord1 + singleStepOffset * %f, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler) * %f;\n", -((float)(currentOverlowTextureRead+1)), standardGaussianWeights[currentOverlowTextureRead+1]];
+        }
+    }
+    
+    [shaderString appendString:@"\
+     return sum * inputValue;\n"];
+    
+    free(standardGaussianWeights);
+    
+    
+    NSArray *inputs = @[
+                        [[CCEffectFunctionInput alloc] initWithType:@"const CCEffectBlurFragData" name:CCShaderArgumentFragIn],
+                        [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:CCShaderUniformPreviousPassTexture],
+                        [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:CCShaderUniformPreviousPassTextureSampler],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device CCEffectTexCoordDimensions*" name:CCShaderArgumentTexCoordDimensions],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device float2&" name:@"blurDirection"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"half4" name:@"inputValue"]
+                        ];
+    
+    CCEffectFunction *blurEffectFunction = [[CCEffectFunction alloc] initWithName:@"blurEffect" body:shaderString inputs:inputs returnType:@"half4"];
+    return @[sampleWithBoundsFunction, blurEffectFunction];
+}
+
++ (CCEffectShaderBuilder *)vertexShaderBuilderWithBlurParams:(CCEffectBlurParams)blurParams
+{
+    NSArray *functions = [CCEffectBlurImplMetal buildVertexFunctionsWithBlurParams:blurParams];
+    NSArray *temporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"CCEffectBlurFragData" name:@"tmp" initializer:CCEffectInitVertexAttributes]];
+    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[0] outputName:@"blurResult" inputs:@{@"fragData" : @"tmp",
+                                                                                                                     @"blurDirection" : @"blurDirection" }]];
+    
+    NSArray *arguments = @[
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device CCVertex*" name:CCShaderArgumentVertexAtttributes qualifier:CCEffectShaderArgumentBuffer],
+                           [[CCEffectShaderArgument alloc] initWithType:@"unsigned int" name:CCShaderArgumentVertexId qualifier:CCEffectShaderArgumentVertexId],
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device float2&" name:@"blurDirection" qualifier:CCEffectShaderArgumentBuffer]
+                           ];
+    
+    NSArray *structs = [CCEffectBlurImplMetal buildStructDeclarationsWithBlurParams:blurParams];
+    
+    return [[CCEffectShaderBuilderMetal alloc] initWithType:CCEffectShaderBuilderVertex
+                                                  functions:functions
+                                                      calls:calls
+                                                temporaries:temporaries
+                                                  arguments:arguments
+                                                    structs:[[CCEffectShaderBuilderMetal defaultStructDeclarations] arrayByAddingObjectsFromArray:structs]];
+
+    
+    
+    return nil;
+}
+
++ (NSArray *)buildVertexFunctionsWithBlurParams:(CCEffectBlurParams)blurParams
+{
+    GLfloat* standardGaussianWeights = CCEffectUtilsComputeGaussianWeightsWithBlurParams(blurParams);
+    
+    NSMutableString *shaderString = [[NSMutableString alloc] init];
+    [shaderString appendString:@"float2 singleStepOffset = blurDirection;\n"];
+    
+    // Inner offset loop
+    for (NSUInteger currentOptimizedOffset = 0; currentOptimizedOffset < blurParams.numberOfOptimizedOffsets; currentOptimizedOffset++)
+    {
+        [shaderString appendFormat:@"\
+         fragData.blurCoordinates%lu = fragData.texCoord1 + singleStepOffset * %f;\n\
+         fragData.blurCoordinates%lu = fragData.texCoord1 - singleStepOffset * %f;\n", (unsigned long)((currentOptimizedOffset * 2) + 1), (float)(currentOptimizedOffset + 1), (unsigned long)((currentOptimizedOffset * 2) + 2), (float)(currentOptimizedOffset + 1)];
+    }
+    
+    [shaderString appendString:@"return fragData;\n"];
+    
+    free(standardGaussianWeights);
+    
+    NSArray *inputs = @[
+                        [[CCEffectFunctionInput alloc] initWithType:@"CCEffectBlurFragData" name:@"fragData"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device float2&" name:@"blurDirection"]
+                        ];
+    
+    return @[[[CCEffectFunction alloc] initWithName:@"blurEffect" body:shaderString inputs:inputs returnType:@"CCEffectBlurFragData"]];
+}
+
++ (NSArray *)buildRenderPasses
+{
+    // optmized approach based on linear sampling - http://rastergrid.com/blog/2010/09/efficient-gaussian-blur-with-linear-sampling/ and GPUImage - https://github.com/BradLarson/GPUImage
+    // pass 0: blurs (horizontal) texture[0] and outputs blurmap to texture[1]
+    // pass 1: blurs (vertical) texture[1] and outputs to texture[2]
+    
+    CCEffectRenderPass *pass0 = [[CCEffectRenderPass alloc] initWithIndex:0];
+    pass0.debugLabel = @"CCEffectBlur pass 0";
+    pass0.blendMode = [CCBlendMode premultipliedAlphaMode];
+    pass0.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+        
+        passInputs.shaderUniforms[CCShaderUniformMainTexture] = passInputs.previousPassTexture;
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = passInputs.texCoord1Center;
+        tcDims.texCoord1Extents = passInputs.texCoord1Extents;
+        tcDims.texCoord2Center = passInputs.texCoord2Center;
+        tcDims.texCoord2Extents = passInputs.texCoord2Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+        
+        GLKVector2 dur = GLKVector2Make(1.0 / (passInputs.previousPassTexture.sizeInPixels.width / passInputs.previousPassTexture.contentScale), 0.0);
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"blurDirection"]] = [NSValue valueWithGLKVector2:dur];
+        
+    }]];
+    
+    
+    CCEffectRenderPass *pass1 = [[CCEffectRenderPass alloc] initWithIndex:1];
+    pass1.debugLabel = @"CCEffectBlur pass 1";
+    pass1.blendMode = [CCBlendMode premultipliedAlphaMode];
+    pass1.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = GLKVector2Make(0.5f, 0.5f);
+        tcDims.texCoord1Extents = GLKVector2Make(1.0f, 1.0f);
+        tcDims.texCoord2Center = passInputs.texCoord2Center;
+        tcDims.texCoord2Extents = passInputs.texCoord2Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+
+        
+        GLKVector2 dur = GLKVector2Make(0.0, 1.0 / (passInputs.previousPassTexture.sizeInPixels.height / passInputs.previousPassTexture.contentScale));
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"blurDirection"]] = [NSValue valueWithGLKVector2:dur];
+        
+    }]];
+    
+    return @[pass0, pass1];
+}
+
+@end
+
+
+#pragma mark - CCEffectBlur
+
 @implementation CCEffectBlur
 {
     BOOL _shaderDirty;
@@ -273,7 +534,14 @@
     {
         self.blurRadius = blurRadius;
         
-        self.effectImpl = [[CCEffectBlurImplGL alloc] initWithInterface:self];
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            self.effectImpl = [[CCEffectBlurImplMetal alloc] initWithInterface:self];
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectBlurImplGL alloc] initWithInterface:self];
+        }
         self.debugName = @"CCEffectBlur";
         return self;
     }
@@ -300,8 +568,14 @@
     CCEffectPrepareResult result = CCEffectPrepareNoop;
     if (_shaderDirty)
     {
-        self.effectImpl = [[CCEffectBlurImplGL alloc] initWithInterface:self];
-
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            self.effectImpl = [[CCEffectBlurImplMetal alloc] initWithInterface:self];
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectBlurImplGL alloc] initWithInterface:self];
+        }
         _shaderDirty = NO;
         
         result.status = CCEffectPrepareSuccess;
