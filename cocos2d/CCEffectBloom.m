@@ -63,7 +63,7 @@
 
 -(id)initWithInterface:(CCEffectBloom *)interface
 {
-    CCEffectBlurParams blurParams = CCEffectUtilsComputeBlurParams(interface.blurRadius);
+    CCEffectBlurParams blurParams = CCEffectUtilsComputeBlurParams(interface.blurRadius, CCEffectBlurOptLinearFiltering);
     
     unsigned long count = (unsigned long)(1 + (blurParams.numberOfOptimizedOffsets * 2));
     CCEffectVarying* v_blurCoords = [CCEffectVarying varying:@"vec2" name:@"v_blurCoordinates" count:count];

@@ -11,6 +11,12 @@
 
 // not documented, effect "utils" are considered private
 
+typedef NS_OPTIONS(NSUInteger, CCEffectBlurOptions)
+{
+    CCEffectBlurOptNone            = 0,
+    CCEffectBlurOptLinearFiltering = (1 << 0),
+};
+
 typedef struct CCEffectBlurParams
 {
     NSUInteger trueRadius;
@@ -37,5 +43,5 @@ float CCEffectUtilsConditionFresnelBias(float bias);
 float CCEffectUtilsConditionFresnelPower(float power);
 void CCEffectUtilsPrintMatrix(NSString *label, GLKMatrix4 matrix);
 
-CCEffectBlurParams CCEffectUtilsComputeBlurParams(NSUInteger radius);
+CCEffectBlurParams CCEffectUtilsComputeBlurParams(NSUInteger radius, CCEffectBlurOptions options);
 GLfloat* CCEffectUtilsComputeGaussianWeightsWithBlurParams(CCEffectBlurParams params);

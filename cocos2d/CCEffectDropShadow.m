@@ -60,7 +60,7 @@
 
 -(id)initWithInterface:(CCEffectDropShadow *)interface
 {
-    CCEffectBlurParams blurParams = CCEffectUtilsComputeBlurParams(interface.blurRadius);
+    CCEffectBlurParams blurParams = CCEffectUtilsComputeBlurParams(interface.blurRadius, CCEffectBlurOptLinearFiltering);
     
     CCEffectUniform* u_blurDirection = [CCEffectUniform uniform:@"highp vec2" name:@"u_blurDirection"
                                                           value:[NSValue valueWithGLKVector2:GLKVector2Make(0.0f, 0.0f)]];

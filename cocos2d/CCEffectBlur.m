@@ -57,7 +57,7 @@
 
 -(id)initWithInterface:(CCEffectBlur *)interface
 {
-    CCEffectBlurParams blurParams = CCEffectUtilsComputeBlurParams(interface.blurRadius);
+    CCEffectBlurParams blurParams = CCEffectUtilsComputeBlurParams(interface.blurRadius, CCEffectBlurOptLinearFiltering);
     
     unsigned long count = (unsigned long)(1 + (blurParams.numberOfOptimizedOffsets * 2));
     NSArray *varyings = @[

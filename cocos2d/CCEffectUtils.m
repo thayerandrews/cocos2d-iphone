@@ -203,7 +203,7 @@ void CCEffectUtilsPrintMatrix(NSString *label, GLKMatrix4 matrix)
     NSLog(@"%f %f %f %f", matrix.m30, matrix.m31, matrix.m32, matrix.m33);
 }
 
-CCEffectBlurParams CCEffectUtilsComputeBlurParams(NSUInteger radius)
+CCEffectBlurParams CCEffectUtilsComputeBlurParams(NSUInteger radius, CCEffectBlurOptions options)
 {
     CCEffectBlurParams result;
     
@@ -231,9 +231,19 @@ CCEffectBlurParams CCEffectUtilsComputeBlurParams(NSUInteger radius)
     {
         result.sigma = 1.0f;
     }
-    result.numberOfOptimizedOffsets = MIN(result.radius / 2 + (result.radius % 2), BLUR_OPTIMIZED_RADIUS_MAX);
-    result.trueNumberOfOptimizedOffsets = result.trueRadius / 2;
-#endif    
+    
+    if (options & CCEffectBlurOptLinearFiltering)
+    {
+        result.numberOfOptimizedOffsets = MIN(result.radius / 2 + (result.radius % 2), BLUR_OPTIMIZED_RADIUS_MAX);
+        result.trueNumberOfOptimizedOffsets = result.trueRadius / 2;
+    }
+    else
+    {
+        result.trueNumberOfOptimizedOffsets = result.trueRadius;
+        result.numberOfOptimizedOffsets = MIN(result.trueNumberOfOptimizedOffsets, BLUR_OPTIMIZED_RADIUS_MAX);
+    }
+
+#endif
     return result;
 }
 
