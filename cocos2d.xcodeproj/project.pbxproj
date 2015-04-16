@@ -522,6 +522,9 @@
 		9DD4D12E1AAE013900E5260A /* CCEffectShader.m in Sources */ = {isa = PBXBuildFile; fileRef = 9DD4D12A1AAE013900E5260A /* CCEffectShader.m */; };
 		9DD4D12F1AAE013900E5260A /* CCEffectShader.m in Sources */ = {isa = PBXBuildFile; fileRef = 9DD4D12A1AAE013900E5260A /* CCEffectShader.m */; };
 		9DD4D1301AAE013900E5260A /* CCEffectShader.m in Sources */ = {isa = PBXBuildFile; fileRef = 9DD4D12A1AAE013900E5260A /* CCEffectShader.m */; };
+		9DD67D461AE0549100D45522 /* CCEffectBlur_Private.h in Headers */ = {isa = PBXBuildFile; fileRef = 9DD67D451AE0549100D45522 /* CCEffectBlur_Private.h */; };
+		9DD67D471AE0549100D45522 /* CCEffectBlur_Private.h in Headers */ = {isa = PBXBuildFile; fileRef = 9DD67D451AE0549100D45522 /* CCEffectBlur_Private.h */; };
+		9DD67D481AE0549100D45522 /* CCEffectBlur_Private.h in Headers */ = {isa = PBXBuildFile; fileRef = 9DD67D451AE0549100D45522 /* CCEffectBlur_Private.h */; };
 		9DDD047E19DE154400687820 /* CCEffectLighting.h in Headers */ = {isa = PBXBuildFile; fileRef = 9DDD047C19DE154400687820 /* CCEffectLighting.h */; };
 		9DDD047F19DE154400687820 /* CCEffectLighting.m in Sources */ = {isa = PBXBuildFile; fileRef = 9DDD047D19DE154400687820 /* CCEffectLighting.m */; };
 		9DF37621191C594A00C6D27A /* CCEffectPixellate.h in Headers */ = {isa = PBXBuildFile; fileRef = 9DF3761F191C594A00C6D27A /* CCEffectPixellate.h */; };
@@ -1415,6 +1418,7 @@
 		9DD4D1201AADF20100E5260A /* CCEffectShaderBuilder.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CCEffectShaderBuilder.m; sourceTree = "<group>"; };
 		9DD4D1291AAE013900E5260A /* CCEffectShader.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CCEffectShader.h; sourceTree = "<group>"; };
 		9DD4D12A1AAE013900E5260A /* CCEffectShader.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CCEffectShader.m; sourceTree = "<group>"; };
+		9DD67D451AE0549100D45522 /* CCEffectBlur_Private.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CCEffectBlur_Private.h; sourceTree = "<group>"; };
 		9DDD047C19DE154400687820 /* CCEffectLighting.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CCEffectLighting.h; sourceTree = "<group>"; };
 		9DDD047D19DE154400687820 /* CCEffectLighting.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CCEffectLighting.m; sourceTree = "<group>"; };
 		9DF3761F191C594A00C6D27A /* CCEffectPixellate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CCEffectPixellate.h; sourceTree = "<group>"; };
@@ -2187,6 +2191,7 @@
 				D268FE06198078FF00ECBCD0 /* CCEffectBloom.m */,
 				D3903B081995285B003AA81A /* CCEffectBlur.h */,
 				D3903B091995285B003AA81A /* CCEffectBlur.m */,
+				9DD67D451AE0549100D45522 /* CCEffectBlur_Private.h */,
 				9D85671B191B018200573093 /* CCEffectBrightness.h */,
 				9D85671C191B018200573093 /* CCEffectBrightness.m */,
 				9DBCA31219B68BE400EFE96D /* CCEffectColorChannelOffset.h */,
@@ -2622,6 +2627,7 @@
 				506602110E38A70D000B500E /* CCScheduler.h in Headers */,
 				D3C8E3C31AB914CE007B31F6 /* CCSetup_Private.h in Headers */,
 				D24161001958F6EE003673BD /* CCAnimationManager+FrameAnimation.h in Headers */,
+				9DD67D461AE0549100D45522 /* CCEffectBlur_Private.h in Headers */,
 				D268FE0F198078FF00ECBCD0 /* CCEffectGlass.h in Headers */,
 				9D96F97E1AA9416A00937308 /* CCEffectVarying.h in Headers */,
 				83E1A86419C8ACA0000A3BCA /* CCPackageConstants.h in Headers */,
@@ -2858,6 +2864,7 @@
 				7A5946A519E372F200F65F90 /* CCTiledMapObjectGroup.h in Headers */,
 				7A5946A619E372F200F65F90 /* CCTiledMapObjectGroup.m in Headers */,
 				9DC1D4361AAE896C00BB3265 /* CCEffectStitcher.h in Headers */,
+				9DD67D481AE0549100D45522 /* CCEffectBlur_Private.h in Headers */,
 				7A5946A719E372F200F65F90 /* CCTMXXMLParser.h in Headers */,
 				7A5946A819E372F200F65F90 /* CCTMXXMLParser.m in Headers */,
 				7A5946A919E372F200F65F90 /* CCTiledMapLayer_Private.h in Headers */,
@@ -3085,6 +3092,7 @@
 				D22907AF1A2F5E440038FF61 /* CCEffectOutline.h in Headers */,
 				D2FEB652194F6C9E00FC0574 /* CCTMXXMLParser.h in Headers */,
 				D2FEB653194F6C9E00FC0574 /* CCRenderTexture.h in Headers */,
+				9DD67D471AE0549100D45522 /* CCEffectBlur_Private.h in Headers */,
 				D2FEB654194F6C9E00FC0574 /* CCBSequenceProperty.h in Headers */,
 				D2FEB655194F6C9E00FC0574 /* CCMotionStreak.h in Headers */,
 				D2FEB656194F6C9E00FC0574 /* CCCache.h in Headers */,
