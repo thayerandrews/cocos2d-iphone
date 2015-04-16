@@ -97,30 +97,26 @@ static NSString * const CCEffectStitcherVaryings = @"CCEffectStitcherVaryings";
 {
     NSAssert(effects.count > 0, @"Unexpectedly empty shader array.");
     
-    NSMutableDictionary *allVtxComponents = [[NSMutableDictionary alloc] init];
-    NSMutableDictionary *allFragComponents = [[NSMutableDictionary alloc] init];
-    NSMutableDictionary *allUTTs = [[NSMutableDictionary alloc] init];
-    
-    // Decompose the input shaders into their component parts and generate mangled versions of any
-    // "file scope" names that could have conflicts (functions, uniforms, varyings). Then merge them
-    // into one big accumulated set of components.
-    int shaderIndex = 0;
-    for (CCEffectImpl *effect in effects)
+    if (effects.count == 1)
     {
+        NSMutableArray *allShaders = [[NSMutableArray alloc] init];
+        NSMutableDictionary *allUTTs = [[NSMutableDictionary alloc] init];
+
+        CCEffectImpl *effect = [effects firstObject];
+        
+        int shaderIndex = 0;
         for (CCEffectShader *shader in effect.shaders)
         {
             // Construct the prefix to use for name mangling.
             NSString *shaderPrefix = [NSString stringWithFormat:@"%@%d_", prefix, shaderIndex];
-
+            
             NSAssert([shader.vertexShaderBuilder isKindOfClass:[CCEffectShaderBuilderGL class]], @"Supplied shader builder is not a GL shader builder.");
             CCEffectShaderBuilderGL *vtxBuilder = (CCEffectShaderBuilderGL *)shader.vertexShaderBuilder;
             NSDictionary *prefixedVtxComponents = [CCEffectStitcherGL prefixComponentsFromBuilder:vtxBuilder withPrefix:shaderPrefix stitchListIndex:stitchListIndex];
-            [CCEffectStitcherGL mergePrefixedComponents:prefixedVtxComponents fromShaderAtIndex:shaderIndex intoAllComponents:allVtxComponents];
-
+            
             NSAssert([shader.fragmentShaderBuilder isKindOfClass:[CCEffectShaderBuilderGL class]], @"Supplied shader builder is not a GL shader builder.");
             CCEffectShaderBuilderGL *fragBuilder = (CCEffectShaderBuilderGL *)shader.fragmentShaderBuilder;
             NSDictionary *prefixedFragComponents = [CCEffectStitcherGL prefixComponentsFromBuilder:fragBuilder withPrefix:shaderPrefix stitchListIndex:stitchListIndex];
-            [CCEffectStitcherGL mergePrefixedComponents:prefixedFragComponents fromShaderAtIndex:shaderIndex intoAllComponents:allFragComponents];
             
             // Build a new translation table from the mangled vertex and fragment
             // uniform names.
@@ -139,36 +135,32 @@ static NSString * const CCEffectStitcherVaryings = @"CCEffectStitcherVaryings";
             allUTTs[shader] = uniformTranslationTable;
             
             shaderIndex++;
+        
+            // Create new shader builders from the accumulated, prefixed components.
+            CCEffectShaderBuilder *prefixedVtxBuilder = [[CCEffectShaderBuilderGL alloc] initWithType:CCEffectShaderBuilderVertex
+                                                                                            functions:[prefixedVtxComponents[CCEffectStitcherFunctions] allValues]
+                                                                                                calls:prefixedVtxComponents[CCEffectStitcherCalls]
+                                                                                          temporaries:[prefixedVtxComponents[CCEffectStitcherTemporaries] allValues]
+                                                                                             uniforms:[prefixedVtxComponents[CCEffectStitcherUniforms] allValues]
+                                                                                             varyings:[prefixedVtxComponents[CCEffectStitcherVaryings] allValues]];
+            
+            CCEffectShaderBuilder *prefixedFragBuilder = [[CCEffectShaderBuilderGL alloc] initWithType:CCEffectShaderBuilderFragment
+                                                                                             functions:[prefixedFragComponents[CCEffectStitcherFunctions] allValues]
+                                                                                                 calls:prefixedFragComponents[CCEffectStitcherCalls]
+                                                                                           temporaries:[prefixedFragComponents[CCEffectStitcherTemporaries] allValues]
+                                                                                              uniforms:[prefixedFragComponents[CCEffectStitcherUniforms] allValues]
+                                                                                              varyings:[prefixedFragComponents[CCEffectStitcherVaryings] allValues]];
+        
+            // Create a new shader with the new builders.
+            [allShaders addObject:[[CCEffectShader alloc] initWithVertexShaderBuilder:prefixedVtxBuilder fragmentShaderBuilder:prefixedFragBuilder]];
         }
-    }
-    
-    // Create new shader builders from the accumulated, prefixed components.
-    CCEffectShaderBuilder *vtxBuilder = [[CCEffectShaderBuilderGL alloc] initWithType:CCEffectShaderBuilderVertex
-                                                                            functions:allVtxComponents[CCEffectStitcherFunctions]
-                                                                                calls:allVtxComponents[CCEffectStitcherCalls]
-                                                                          temporaries:allVtxComponents[CCEffectStitcherTemporaries]
-                                                                             uniforms:[allVtxComponents[CCEffectStitcherUniforms] allValues]
-                                                                             varyings:allVtxComponents[CCEffectStitcherVaryings]];
-    
-    CCEffectShaderBuilder *fragBuilder = [[CCEffectShaderBuilderGL alloc] initWithType:CCEffectShaderBuilderFragment
-                                                                             functions:allFragComponents[CCEffectStitcherFunctions]
-                                                                                 calls:allFragComponents[CCEffectStitcherCalls]
-                                                                           temporaries:allFragComponents[CCEffectStitcherTemporaries]
-                                                                              uniforms:[allFragComponents[CCEffectStitcherUniforms] allValues]
-                                                                              varyings:allFragComponents[CCEffectStitcherVaryings]];
-    
-    // Create a new shader with the new builders.
-    _cachedShaders = @[[[CCEffectShader alloc] initWithVertexShaderBuilder:vtxBuilder fragmentShaderBuilder:fragBuilder]];
-    
-    
-    if (effects.count == 1)
-    {
+        _cachedShaders = [allShaders copy];
+        
         // If there was only one effect in the stitch list copy its render
         // passes into the output stitched effect. Update the copied passes
         // so they point to the new shader in the stitched effect and update
         // the uniform translation table.
         
-        CCEffectImpl *effect = [effects firstObject];
         NSMutableArray *renderPasses = [[NSMutableArray alloc] init];
         for (CCEffectRenderPass *pass in effect.renderPasses)
         {
@@ -182,12 +174,74 @@ static NSString * const CCEffectStitcherVaryings = @"CCEffectStitcherVaryings";
             }
             
             [renderPasses addObject:newPass];
-        }
-        
+        }        
         _cachedRenderPasses = [renderPasses copy];
     }
     else
     {
+        NSMutableDictionary *allVtxComponents = [[NSMutableDictionary alloc] init];
+        NSMutableDictionary *allFragComponents = [[NSMutableDictionary alloc] init];
+        NSMutableDictionary *allUTTs = [[NSMutableDictionary alloc] init];
+        
+        // Decompose the input shaders into their component parts and generate mangled versions of any
+        // "file scope" names that could have conflicts (functions, uniforms, varyings). Then merge them
+        // into one big accumulated set of components.
+        int shaderIndex = 0;
+        for (CCEffectImpl *effect in effects)
+        {
+            for (CCEffectShader *shader in effect.shaders)
+            {
+                // Construct the prefix to use for name mangling.
+                NSString *shaderPrefix = [NSString stringWithFormat:@"%@%d_", prefix, shaderIndex];
+                
+                NSAssert([shader.vertexShaderBuilder isKindOfClass:[CCEffectShaderBuilderGL class]], @"Supplied shader builder is not a GL shader builder.");
+                CCEffectShaderBuilderGL *vtxBuilder = (CCEffectShaderBuilderGL *)shader.vertexShaderBuilder;
+                NSDictionary *prefixedVtxComponents = [CCEffectStitcherGL prefixComponentsFromBuilder:vtxBuilder withPrefix:shaderPrefix stitchListIndex:stitchListIndex];
+                [CCEffectStitcherGL mergePrefixedComponents:prefixedVtxComponents fromShaderAtIndex:shaderIndex intoAllComponents:allVtxComponents];
+                
+                NSAssert([shader.fragmentShaderBuilder isKindOfClass:[CCEffectShaderBuilderGL class]], @"Supplied shader builder is not a GL shader builder.");
+                CCEffectShaderBuilderGL *fragBuilder = (CCEffectShaderBuilderGL *)shader.fragmentShaderBuilder;
+                NSDictionary *prefixedFragComponents = [CCEffectStitcherGL prefixComponentsFromBuilder:fragBuilder withPrefix:shaderPrefix stitchListIndex:stitchListIndex];
+                [CCEffectStitcherGL mergePrefixedComponents:prefixedFragComponents fromShaderAtIndex:shaderIndex intoAllComponents:allFragComponents];
+                
+                // Build a new translation table from the mangled vertex and fragment
+                // uniform names.
+                NSMutableDictionary* uniformTranslationTable = [[NSMutableDictionary alloc] init];
+                for (NSString *key in prefixedVtxComponents[CCEffectStitcherUniforms])
+                {
+                    CCEffectUniform *uniform = prefixedVtxComponents[CCEffectStitcherUniforms][key];
+                    uniformTranslationTable[key] = uniform.name;
+                }
+                
+                for (NSString *key in prefixedFragComponents[CCEffectStitcherUniforms])
+                {
+                    CCEffectUniform *uniform = prefixedFragComponents[CCEffectStitcherUniforms][key];
+                    uniformTranslationTable[key] = uniform.name;
+                }
+                allUTTs[shader] = uniformTranslationTable;
+                
+                shaderIndex++;
+            }
+        }
+        
+        // Create new shader builders from the accumulated, prefixed components.
+        CCEffectShaderBuilder *vtxBuilder = [[CCEffectShaderBuilderGL alloc] initWithType:CCEffectShaderBuilderVertex
+                                                                                functions:allVtxComponents[CCEffectStitcherFunctions]
+                                                                                    calls:allVtxComponents[CCEffectStitcherCalls]
+                                                                              temporaries:allVtxComponents[CCEffectStitcherTemporaries]
+                                                                                 uniforms:[allVtxComponents[CCEffectStitcherUniforms] allValues]
+                                                                                 varyings:allVtxComponents[CCEffectStitcherVaryings]];
+        
+        CCEffectShaderBuilder *fragBuilder = [[CCEffectShaderBuilderGL alloc] initWithType:CCEffectShaderBuilderFragment
+                                                                                 functions:allFragComponents[CCEffectStitcherFunctions]
+                                                                                     calls:allFragComponents[CCEffectStitcherCalls]
+                                                                               temporaries:allFragComponents[CCEffectStitcherTemporaries]
+                                                                                  uniforms:[allFragComponents[CCEffectStitcherUniforms] allValues]
+                                                                                  varyings:allFragComponents[CCEffectStitcherVaryings]];
+        
+        // Create a new shader with the new builders.
+        _cachedShaders = @[[[CCEffectShader alloc] initWithVertexShaderBuilder:vtxBuilder fragmentShaderBuilder:fragBuilder]];
+        
         // Create a new render pass and point it at the stitched shader.
         CCEffectRenderPass *renderPass = [[CCEffectRenderPass alloc] init];
         renderPass.debugLabel = [NSString stringWithFormat:@"CCEffectStack_Stitched_%@", prefix];;
