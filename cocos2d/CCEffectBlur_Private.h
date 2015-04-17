@@ -18,3 +18,12 @@
 + (NSArray *)buildShadersWithBlurParams:(CCEffectBlurParams)blurParams;
 
 @end
+
+
+@interface CCEffectBlurImplMetal : CCEffectImpl
+
+@property (nonatomic, weak) CCEffectBlur *interface;
+
++ (NSArray *)buildShadersWithBlurParams:(CCEffectBlurParams)blurParams;
+
+@end

@@ -40,15 +40,20 @@
 //  <End GPUImage license>
 
 #import "CCEffectDropShadow.h"
+#import "CCColor.h"
 #import "CCEffectBlur_Private.h"
 #import "CCEffectShader.h"
 #import "CCEffectShaderBuilderGL.h"
+#import "CCEffectShaderBuilderMetal.h"
 #import "CCEffectUtils.h"
 #import "CCEffect_Private.h"
-#import "CCTexture.h"
-#import "CCColor.h"
 #import "CCRenderer.h"
+#import "CCSetup.h"
+#import "CCTexture.h"
 
+
+
+#pragma mark - CCEffectDropShadowImplGL
 
 @interface CCEffectDropShadowImplGL : CCEffectImpl
 
@@ -175,6 +180,189 @@
 @end
 
 
+#pragma mark - CCEffectDropShadowImplMetal
+
+typedef struct CCEffectDropShadowParameters
+{
+    GLKVector2 shadowOffset;
+    GLKVector4 shadowColor;
+} CCEffectDropShadowParameters;
+
+
+@interface CCEffectDropShadowImplMetal : CCEffectImpl
+
+@property (nonatomic, weak) CCEffectDropShadow *interface;
+
+@end
+
+
+@implementation CCEffectDropShadowImplMetal
+
+-(id)initWithInterface:(CCEffectDropShadow *)interface
+{
+    CCEffectBlurParams blurParams = CCEffectUtilsComputeBlurParams(interface.blurRadius, CCEffectBlurOptNone);
+    
+    NSArray *renderPasses = [CCEffectDropShadowImplMetal buildRenderPassesWithInterface:interface];
+    NSArray *shaders = [CCEffectDropShadowImplMetal buildShaders];
+    
+    if((self = [super initWithRenderPasses:renderPasses shaders:[[CCEffectBlurImplMetal buildShadersWithBlurParams:blurParams] arrayByAddingObjectsFromArray:shaders]]))
+    {
+        self.interface = interface;
+        self.debugName = @"CCEffectDropShadowImplMetal";
+        self.stitchFlags = 0
+        ;
+    }
+    
+    return self;
+}
+
++ (NSArray *)buildShaders
+{
+    return @[[[CCEffectShader alloc] initWithVertexShaderBuilder:[CCEffectShaderBuilderMetal defaultVertexShaderBuilder] fragmentShaderBuilder:[CCEffectDropShadowImplMetal fragShaderBuilder]]];
+}
+
++ (CCEffectShaderBuilder *)fragShaderBuilder
+{
+    NSArray *functions = [CCEffectDropShadowImplMetal buildFragmentFunctions];
+    NSArray *temporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"half4" name:@"tmp" initializer:CCEffectInitFragColor]];
+    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[0] outputName:@"shadowed" inputs:@{@"cc_FragIn" : @"cc_FragIn",
+                                                                                                                   @"cc_PreviousPassTexture" : @"cc_PreviousPassTexture",
+                                                                                                                   @"cc_PreviousPassTextureSampler" : @"cc_PreviousPassTextureSampler",
+                                                                                                                   @"cc_MainTexture" : @"cc_MainTexture",
+                                                                                                                   @"cc_MainTextureSampler" : @"cc_MainTextureSampler",
+                                                                                                                   @"cc_FragTexCoordDimensions" : @"cc_FragTexCoordDimensions",
+                                                                                                                   @"shadowParams" : @"shadowParams",
+                                                                                                                   @"inputValue" : @"tmp"
+                                                                                                                   }]];
+    NSArray *arguments = @[
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device CCEffectDropShadowParameters*" name:@"shadowParams" qualifier:CCEffectShaderArgumentBuffer]
+                           ];
+    
+    NSString* structDropShadowParams =
+    @"float2 shadowOffset;\n"
+    @"float4 shadowColor;\n";
+    
+    NSArray *structs = @[
+                         [[CCEffectShaderStructDeclaration alloc] initWithName:@"CCEffectDropShadowParameters" body:structDropShadowParams]
+                         ];
+    
+    return [[CCEffectShaderBuilderMetal alloc] initWithType:CCEffectShaderBuilderFragment
+                                                  functions:[[CCEffectShaderBuilderMetal defaultFragmentFunctions] arrayByAddingObjectsFromArray:functions]
+                                                      calls:calls
+                                                temporaries:temporaries
+                                                  arguments:[[CCEffectShaderBuilderMetal defaultFragmentArguments] arrayByAddingObjectsFromArray:arguments]
+                                                    structs:[[CCEffectShaderBuilderMetal defaultStructDeclarations] arrayByAddingObjectsFromArray:structs]];
+}
+
++ (NSArray *)buildFragmentFunctions
+{
+    NSArray *effectInputs = @[
+                              [[CCEffectFunctionInput alloc] initWithType:@"const CCFragData" name:CCShaderArgumentFragIn],
+                              [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:CCShaderUniformPreviousPassTexture],
+                              [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:CCShaderUniformPreviousPassTextureSampler],
+                              [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:CCShaderUniformMainTexture],
+                              [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:CCShaderUniformMainTextureSampler],
+                              [[CCEffectFunctionInput alloc] initWithType:@"const device CCEffectTexCoordDimensions*" name:CCShaderArgumentTexCoordDimensions],
+                              [[CCEffectFunctionInput alloc] initWithType:@"const device CCEffectDropShadowParameters*" name:@"shadowParams"],
+                              [[CCEffectFunctionInput alloc] initWithType:@"half4" name:@"inputValue"]
+                              ];
+    
+    NSString *effectBody = CC_GLSL(
+                                   float shadowAlpha = CCEffectSampleWithBounds(cc_FragIn.texCoord1 - shadowParams->shadowOffset,
+                                                                                cc_FragTexCoordDimensions->texCoord1Center,
+                                                                                cc_FragTexCoordDimensions->texCoord1Extents,
+                                                                                cc_PreviousPassTexture,
+                                                                                cc_PreviousPassTextureSampler).a;
+                                   half4 shadowColor = (half4)(shadowParams->shadowColor * shadowAlpha);
+                                   half4 outputColor = inputValue * cc_MainTexture.sample(cc_MainTextureSampler, cc_FragIn.texCoord1);
+                                   outputColor = outputColor + (1.0 - outputColor.a) * shadowColor;
+                                   return outputColor;
+
+                                   );
+    return @[[[CCEffectFunction alloc] initWithName:@"dropShadow" body:effectBody inputs:effectInputs returnType:@"half4"]];
+}
+
++ (NSArray *)buildRenderPassesWithInterface:(CCEffectDropShadow *)interface
+{
+    // optmized approach based on linear sampling - http://rastergrid.com/blog/2010/09/efficient-gaussian-blur-with-linear-sampling/ and GPUImage - https://github.com/BradLarson/GPUImage
+    // pass 0: blurs (horizontal) texture[0] and outputs blurmap to texture[1]
+    // pass 1: blurs (vertical) texture[1] and outputs to texture[2]
+    
+    __weak CCEffectDropShadow *weakInterface = interface;
+    
+    CCEffectRenderPass *pass0 = [[CCEffectRenderPass alloc] init];
+    pass0.debugLabel = @"CCEffectDropShadow pass 0";
+    pass0.shaderIndex = 0;
+    pass0.blendMode = [CCBlendMode premultipliedAlphaMode];
+    pass0.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+        
+        passInputs.shaderUniforms[CCShaderUniformMainTexture] = passInputs.previousPassTexture;
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = passInputs.texCoord1Center;
+        tcDims.texCoord1Extents = passInputs.texCoord1Extents;
+        tcDims.texCoord2Center = passInputs.texCoord2Center;
+        tcDims.texCoord2Extents = passInputs.texCoord2Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+        
+        GLKVector2 dur = GLKVector2Make(1.0 / (passInputs.previousPassTexture.sizeInPixels.width / passInputs.previousPassTexture.contentScale), 0.0);
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"blurDirection"]] = [NSValue valueWithGLKVector2:dur];
+    }]];
+    
+    
+    CCEffectRenderPass *pass1 = [[CCEffectRenderPass alloc] init];
+    pass1.debugLabel = @"CCEffectDropShadow pass 1";
+    pass1.shaderIndex = 0;
+    pass1.blendMode = [CCBlendMode premultipliedAlphaMode];
+    pass1.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+        
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = GLKVector2Make(0.5f, 0.5f);
+        tcDims.texCoord1Extents = GLKVector2Make(1.0f, 1.0f);
+        tcDims.texCoord2Center = passInputs.texCoord2Center;
+        tcDims.texCoord2Extents = passInputs.texCoord2Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+        
+        GLKVector2 dur = GLKVector2Make(0.0, 1.0 / (passInputs.previousPassTexture.sizeInPixels.height / passInputs.previousPassTexture.contentScale));
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"blurDirection"]] = [NSValue valueWithGLKVector2:dur];
+        
+    }]];
+    
+    CCEffectRenderPass *pass3 = [[CCEffectRenderPass alloc] init];
+    pass3.debugLabel = @"CCEffectDropShadow pass 3";
+    pass3.shaderIndex = 1;
+    pass3.blendMode = [CCBlendMode premultipliedAlphaMode];
+    pass3.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+                
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = passInputs.texCoord1Center;
+        tcDims.texCoord1Extents = passInputs.texCoord1Extents;
+        tcDims.texCoord2Center = passInputs.texCoord2Center;
+        tcDims.texCoord2Extents = passInputs.texCoord2Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+
+        CCEffectDropShadowParameters parameters;
+        parameters.shadowOffset = GLKVector2Make(weakInterface.shadowOffset.x / passInputs.previousPassTexture.contentSize.width,
+                                                 weakInterface.shadowOffset.y / passInputs.previousPassTexture.contentSize.height);
+        parameters.shadowColor = weakInterface.shadowColor.glkVector4;
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"shadowParams"]] = [NSValue valueWithBytes:&parameters objCType:@encode(CCEffectDropShadowParameters)];
+        
+        
+    }]];
+    
+    return @[pass0, pass1, pass3];
+}
+
+@end
+
+
+#pragma mark - CCEffectDropShadow
+
 @implementation CCEffectDropShadow
 {
     BOOL _shaderDirty;
@@ -193,7 +381,14 @@
         _shadowOffset = shadowOffset;
         self.blurRadius = blurRadius;
         
-        self.effectImpl = [[CCEffectDropShadowImplGL alloc] initWithInterface:self];
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            self.effectImpl = [[CCEffectDropShadowImplMetal alloc] initWithInterface:self];
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectDropShadowImplGL alloc] initWithInterface:self];
+        }
         self.debugName = @"CCEffectDropShadow";
     }
     return self;
@@ -218,8 +413,14 @@
     CCEffectPrepareResult result = CCEffectPrepareNoop;
     if (_shaderDirty)
     {
-        self.effectImpl = [[CCEffectDropShadowImplGL alloc] initWithInterface:self];
-        
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            self.effectImpl = [[CCEffectDropShadowImplMetal alloc] initWithInterface:self];
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectDropShadowImplGL alloc] initWithInterface:self];
+        }
         _shaderDirty = NO;
         
         result.status = CCEffectPrepareSuccess;

@@ -276,10 +276,6 @@
 
 #pragma mark - CCEffectBlurImplMetal
 
-@interface CCEffectBlurImplMetal : CCEffectImpl
-@property (nonatomic, weak) CCEffectBlur *interface;
-@end
-
 @implementation CCEffectBlurImplMetal
 
 -(id)initWithInterface:(CCEffectBlur *)interface
