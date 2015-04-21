@@ -188,6 +188,170 @@
 @end
 
 
+
+#pragma mark - CCEffectBloomImplMetal
+
+@interface CCEffectBloomImplMetal : CCEffectImpl
+@property (nonatomic, weak) CCEffectBloom *interface;
+@end
+
+@implementation CCEffectBloomImplMetal
+
+-(id)initWithInterface:(CCEffectBloom *)interface
+{
+    CCEffectBlurParams blurParams = CCEffectUtilsComputeBlurParams(interface.blurRadius, CCEffectBlurOptLinearFiltering);
+    blurParams.luminanceThresholdEnabled = YES;
+    
+    NSArray *renderPasses = [CCEffectBloomImplMetal buildRenderPassesWithInterface:interface];
+    NSArray *shaders = [CCEffectBloomImplMetal buildShaders];
+
+    if((self = [super initWithRenderPasses:renderPasses shaders:[[CCEffectBlurImplMetal buildShadersWithBlurParams:blurParams] arrayByAddingObjectsFromArray:shaders]]))
+    {
+        self.interface = interface;
+        self.debugName = @"CCEffectBloomImplMetal";
+        self.stitchFlags = 0;
+        return self;
+    }
+    
+    return self;
+}
+
++ (NSArray *)buildShaders
+{
+    return @[[[CCEffectShader alloc] initWithVertexShaderBuilder:[CCEffectShaderBuilderMetal defaultVertexShaderBuilder] fragmentShaderBuilder:[CCEffectBloomImplMetal fragShaderBuilder]]];
+}
+
++ (CCEffectShaderBuilder *)fragShaderBuilder
+{
+    NSArray *functions = [CCEffectBloomImplMetal buildFragmentFunctions];
+    NSArray *temporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"half4" name:@"tmp" initializer:CCEffectInitFragColor]];
+    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[0] outputName:@"bloomed" inputs:@{@"cc_FragIn" : @"cc_FragIn",
+                                                                                                                  @"cc_PreviousPassTexture" : @"cc_PreviousPassTexture",
+                                                                                                                  @"cc_PreviousPassTextureSampler" : @"cc_PreviousPassTextureSampler",
+                                                                                                                  @"cc_MainTexture" : @"cc_MainTexture",
+                                                                                                                  @"cc_MainTextureSampler" : @"cc_MainTextureSampler",
+                                                                                                                  @"cc_FragTexCoordDimensions" : @"cc_FragTexCoordDimensions",
+                                                                                                                  @"bloomIntensity" : @"bloomIntensity",
+                                                                                                                  @"inputValue" : @"tmp"
+                                                                                                                  }]];
+    NSArray *arguments = @[
+                           [[CCEffectShaderArgument alloc] initWithType:@"const device float&" name:@"bloomIntensity" qualifier:CCEffectShaderArgumentBuffer]
+                           ];
+    
+    return [[CCEffectShaderBuilderMetal alloc] initWithType:CCEffectShaderBuilderFragment
+                                                  functions:[[CCEffectShaderBuilderMetal defaultFragmentFunctions] arrayByAddingObjectsFromArray:functions]
+                                                      calls:calls
+                                                temporaries:temporaries
+                                                  arguments:[[CCEffectShaderBuilderMetal defaultFragmentArguments] arrayByAddingObjectsFromArray:arguments]
+                                                    structs:[CCEffectShaderBuilderMetal defaultStructDeclarations]];
+}
+
++ (NSArray *)buildFragmentFunctions
+{
+    NSArray *inputs = @[
+                        [[CCEffectFunctionInput alloc] initWithType:@"const CCFragData" name:CCShaderArgumentFragIn],
+                        [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:CCShaderUniformPreviousPassTexture],
+                        [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:CCShaderUniformPreviousPassTextureSampler],
+                        [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:CCShaderUniformMainTexture],
+                        [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:CCShaderUniformMainTextureSampler],
+                        [[CCEffectFunctionInput alloc] initWithType:@"const device CCEffectTexCoordDimensions*" name:CCShaderArgumentTexCoordDimensions],
+                        [[CCEffectFunctionInput alloc] initWithType:@"float" name:@"bloomIntensity"],
+                        [[CCEffectFunctionInput alloc] initWithType:@"half4" name:@"inputValue"]
+                        ];
+    
+    NSString *effectBody = CC_GLSL(
+                                   half4 dst = inputValue * CCEffectSampleWithBounds(cc_FragIn.texCoord2, cc_FragTexCoordDimensions->texCoord2Center, cc_FragTexCoordDimensions->texCoord2Extents, cc_MainTexture, cc_MainTextureSampler);
+                                   half4 src = cc_PreviousPassTexture.sample(cc_PreviousPassTextureSampler, cc_FragIn.texCoord1);
+                                   return (src * bloomIntensity + dst) - ((src * dst) * bloomIntensity);
+                                   );
+    
+    return @[[[CCEffectFunction alloc] initWithName:@"bloomEffect" body:effectBody inputs:inputs returnType:@"half4"]];
+}
+
++ (NSArray *)buildRenderPassesWithInterface:(CCEffectBloom *)interface
+{
+    // optmized approach based on linear sampling - http://rastergrid.com/blog/2010/09/efficient-gaussian-blur-with-linear-sampling/ and GPUImage - https://github.com/BradLarson/GPUImage
+    // pass 0: blurs (horizontal) texture[0] and outputs blurmap to texture[1]
+    // pass 1: blurs (vertical) texture[1] and outputs to texture[2]
+    // pass 2: blends texture[0] and texture[2] and outputs to texture[3]
+    
+    // Why not just use self (or "__weak self" really)? Because at the time these blocks are created,
+    // self is not necesssarily valid.
+    __weak CCEffectBloom *weakInterface = interface;
+    
+    
+    CCEffectRenderPass *pass0 = [[CCEffectRenderPass alloc] initWithIndex:0];
+    pass0.debugLabel = @"CCEffectBloom pass 0";
+    pass0.shaderIndex = 0;
+    pass0.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+        
+        passInputs.shaderUniforms[CCShaderUniformMainTexture] = passInputs.previousPassTexture;
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = passInputs.texCoord1Center;
+        tcDims.texCoord1Extents = passInputs.texCoord1Extents;
+        tcDims.texCoord2Center = passInputs.texCoord2Center;
+        tcDims.texCoord2Extents = passInputs.texCoord2Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+        
+        GLKVector2 dur = GLKVector2Make(1.0 / (passInputs.previousPassTexture.sizeInPixels.width / passInputs.previousPassTexture.contentScale), 0.0);
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"blurDirection"]] = [NSValue valueWithGLKVector2:dur];
+
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"luminanceThreshold"]] = weakInterface.conditionedThreshold;
+        
+    }]];
+    
+    
+    CCEffectRenderPass *pass1 = [[CCEffectRenderPass alloc] initWithIndex:1];
+    pass1.debugLabel = @"CCEffectBloom pass 1";
+    pass1.shaderIndex = 0;
+    pass1.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = passInputs.texCoord1Center;
+        tcDims.texCoord1Extents = passInputs.texCoord1Extents;
+        tcDims.texCoord2Center = passInputs.texCoord2Center;
+        tcDims.texCoord2Extents = passInputs.texCoord2Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+        
+        GLKVector2 dur = GLKVector2Make(0.0, 1.0 / (passInputs.previousPassTexture.sizeInPixels.height / passInputs.previousPassTexture.contentScale));
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"blurDirection"]] = [NSValue valueWithGLKVector2:dur];
+        
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"luminanceThreshold"]] = @(0.0f);
+        
+    }]];
+    
+    CCEffectRenderPass *pass2 = [[CCEffectRenderPass alloc] initWithIndex:2];
+    pass2.debugLabel = @"CCEffectBloom pass 2";
+    pass2.shaderIndex = 1;
+    pass2.texCoord1Mapping = CCEffectTexCoordMapPreviousPassTex;
+    pass2.texCoord2Mapping = CCEffectTexCoordMapMainTex;
+    pass2.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+        
+        passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
+        
+        CCEffectTexCoordDimensions tcDims;
+        tcDims.texCoord1Center = GLKVector2Make(0.5f, 0.5f);
+        tcDims.texCoord1Extents = GLKVector2Make(1.0f, 1.0f);
+        tcDims.texCoord2Center = passInputs.texCoord1Center;
+        tcDims.texCoord2Extents = passInputs.texCoord1Extents;
+        passInputs.shaderUniforms[CCShaderArgumentTexCoordDimensions] = [NSValue valueWithBytes:&tcDims objCType:@encode(CCEffectTexCoordDimensions)];
+
+        passInputs.shaderUniforms[passInputs.uniformTranslationTable[@"bloomIntensity"]] = weakInterface.conditionedIntensity;
+        
+    }]];
+    
+    return @[pass0, pass1, pass2];
+}
+
+@end
+
+
+#pragma mark - CCEffectBloom
+
 @implementation CCEffectBloom
 {
     BOOL _shaderDirty;
@@ -211,7 +375,14 @@
         self.intensity = intensity;
         self.luminanceThreshold = luminanceThreshold;
         
-        self.effectImpl = [[CCEffectBloomImplGL alloc] initWithInterface:self];
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            self.effectImpl = [[CCEffectBloomImplMetal alloc] initWithInterface:self];
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectBloomImplGL alloc] initWithInterface:self];
+        }
         self.debugName = @"CCEffectBloom";
         return self;
     }
@@ -250,7 +421,14 @@
     CCEffectPrepareResult result = CCEffectPrepareNoop;
     if (_shaderDirty)
     {
-        self.effectImpl = [[CCEffectBloomImplGL alloc] initWithInterface:self];
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            self.effectImpl = [[CCEffectBloomImplMetal alloc] initWithInterface:self];
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectBloomImplGL alloc] initWithInterface:self];
+        }
         
         _shaderDirty = NO;
         
