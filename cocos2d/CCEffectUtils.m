@@ -206,6 +206,7 @@ void CCEffectUtilsPrintMatrix(NSString *label, GLKMatrix4 matrix)
 CCEffectBlurParams CCEffectUtilsComputeBlurParams(NSUInteger radius, CCEffectBlurOptions options)
 {
     CCEffectBlurParams result;
+    result.luminanceThresholdEnabled = NO;
     
 #ifdef IMPROVED_SIGMA_CALCULATION
     NSUInteger calculatedSampleRadius = 0;

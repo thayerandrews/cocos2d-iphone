@@ -24,6 +24,7 @@ typedef struct CCEffectBlurParams
     NSUInteger numberOfOptimizedOffsets;
     NSUInteger trueNumberOfOptimizedOffsets;
     GLfloat sigma;
+    BOOL luminanceThresholdEnabled;
 
 } CCEffectBlurParams;
 

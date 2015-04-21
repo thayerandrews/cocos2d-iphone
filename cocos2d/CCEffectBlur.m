@@ -58,6 +58,7 @@
 -(id)initWithInterface:(CCEffectBlur *)interface
 {
     CCEffectBlurParams blurParams = CCEffectUtilsComputeBlurParams(interface.blurRadius, CCEffectBlurOptLinearFiltering);
+    blurParams.luminanceThresholdEnabled = NO;
     
     NSArray *renderPasses = [CCEffectBlurImplGL buildRenderPasses];
     NSArray *shaders =  [CCEffectBlurImplGL buildShadersWithBlurParams:blurParams];
@@ -86,12 +87,17 @@
     NSArray *fragFunctions = [CCEffectBlurImplGL buildFragmentFunctionsWithBlurParams:blurParams];
     NSArray *fragTemporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"vec4" name:@"tmp" initializer:CCEffectInitFragColor]];
     NSArray *fragCalls = @[[[CCEffectFunctionCall alloc] initWithFunction:fragFunctions[0] outputName:@"blur" inputs:@{@"inputValue" : @"tmp"}]];
-    NSArray *fragUniforms = @[
-                              [CCEffectUniform uniform:@"sampler2D" name:CCShaderUniformPreviousPassTexture value:(NSValue *)[CCTexture none]],
-                              [CCEffectUniform uniform:@"vec2" name:CCShaderUniformTexCoord1Center value:[NSValue valueWithGLKVector2:GLKVector2Make(0.0f, 0.0f)]],
-                              [CCEffectUniform uniform:@"vec2" name:CCShaderUniformTexCoord1Extents value:[NSValue valueWithGLKVector2:GLKVector2Make(0.0f, 0.0f)]],
-                              [CCEffectUniform uniform:@"highp vec2" name:@"u_blurDirection" value:[NSValue valueWithGLKVector2:GLKVector2Make(0.0f, 0.0f)]]
-                              ];
+    NSMutableArray *fragUniforms = [NSMutableArray arrayWithArray:@[
+                                                                    [CCEffectUniform uniform:@"sampler2D" name:CCShaderUniformPreviousPassTexture value:(NSValue *)[CCTexture none]],
+                                                                    [CCEffectUniform uniform:@"vec2" name:CCShaderUniformTexCoord1Center value:[NSValue valueWithGLKVector2:GLKVector2Make(0.0f, 0.0f)]],
+                                                                    [CCEffectUniform uniform:@"vec2" name:CCShaderUniformTexCoord1Extents value:[NSValue valueWithGLKVector2:GLKVector2Make(0.0f, 0.0f)]],
+                                                                    [CCEffectUniform uniform:@"highp vec2" name:@"u_blurDirection" value:[NSValue valueWithGLKVector2:GLKVector2Make(0.0f, 0.0f)]]
+                                                                    ]];
+    
+    if (blurParams.luminanceThresholdEnabled)
+    {
+        [fragUniforms addObject:[CCEffectUniform uniform:@"float" name:@"u_luminanceThreshold" value:[NSNumber numberWithFloat:0.0f]]];
+    }
     
     return [[CCEffectShaderBuilderGL alloc] initWithType:CCEffectShaderBuilderFragment
                                                functions:[[CCEffectShaderBuilderGL defaultFragmentFunctions] arrayByAddingObjectsFromArray:fragFunctions]
@@ -110,8 +116,15 @@
     // Header
     [shaderString appendFormat:@"\
      lowp vec4 sum = vec4(0.0);\n\
-     vec2 blurCoords;\
+     vec2 blurCoords;\n\
+     vec4 srcSample;\n\
      "];
+
+    if (blurParams.luminanceThresholdEnabled)
+    {
+        [shaderString appendString:@"const vec3 luminanceWeighting = vec3(0.2125, 0.7154, 0.0721);\n"];
+    }
+    
     
     // Inner texture loop
     [shaderString appendFormat:@"sum += CCEffectSampleWithBounds(v_blurCoordinates[0], cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture) * %f;\n", (blurParams.trueRadius == 0) ? 1.0 : standardGaussianWeights[0]];
@@ -123,10 +136,22 @@
         GLfloat optimizedWeight = firstWeight + secondWeight;
         
         [shaderString appendFormat:@"blurCoords = v_blurCoordinates[%lu];", (unsigned long)((currentBlurCoordinateIndex * 2) + 1)];
-        [shaderString appendFormat:@"sum += CCEffectSampleWithBounds(blurCoords, cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture) * %f;\n", optimizedWeight];
+        [shaderString appendFormat:@"srcSample = CCEffectSampleWithBounds(blurCoords, cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture);\n"];
+        if (blurParams.luminanceThresholdEnabled)
+        {
+            [shaderString appendString:@"srcSample *= step(u_luminanceThreshold, dot(srcSample.rgb, luminanceWeighting));\n"];
+        }
+        [shaderString appendFormat:@"sum += srcSample * %f;\n", optimizedWeight];
+
         
         [shaderString appendFormat:@"blurCoords = v_blurCoordinates[%lu];", (unsigned long)((currentBlurCoordinateIndex * 2) + 2)];
-        [shaderString appendFormat:@"sum += CCEffectSampleWithBounds(blurCoords, cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture) * %f;\n", optimizedWeight];
+        [shaderString appendFormat:@"srcSample = CCEffectSampleWithBounds(blurCoords, cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture);\n"];
+        if (blurParams.luminanceThresholdEnabled)
+        {
+            [shaderString appendString:@"srcSample *= step(u_luminanceThreshold, dot(srcSample.rgb, luminanceWeighting));\n"];
+        }
+        [shaderString appendFormat:@"sum += srcSample * %f;\n", optimizedWeight];
+
     }
     
     // If the number of required samples exceeds the amount we can pass in via varyings, we have to do dependent texture reads in the fragment shader
@@ -143,10 +168,20 @@
             GLfloat optimizedOffset = (firstWeight * (currentOverlowTextureRead * 2 + 1) + secondWeight * (currentOverlowTextureRead * 2 + 2)) / optimizedWeight;
 
             [shaderString appendFormat:@"blurCoords = v_blurCoordinates[0] + singleStepOffset * %f;", optimizedOffset];
-            [shaderString appendFormat:@"sum += CCEffectSampleWithBounds(blurCoords, cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture) * %f;\n", optimizedWeight];
+            [shaderString appendFormat:@"srcSample = CCEffectSampleWithBounds(blurCoords, cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture);\n"];
+            if (blurParams.luminanceThresholdEnabled)
+            {
+                [shaderString appendString:@"srcSample *= step(u_luminanceThreshold, dot(srcSample.rgb, luminanceWeighting));\n"];
+            }
+            [shaderString appendFormat:@"sum += srcSample * %f;\n", optimizedWeight];
 
             [shaderString appendFormat:@"blurCoords = v_blurCoordinates[0] - singleStepOffset * %f;", optimizedOffset];
-            [shaderString appendFormat:@"sum += CCEffectSampleWithBounds(blurCoords, cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture) * %f;\n", optimizedWeight];
+            [shaderString appendFormat:@"srcSample = CCEffectSampleWithBounds(blurCoords, cc_FragTexCoord1Center, cc_FragTexCoord1Extents, cc_PreviousPassTexture);\n"];
+            if (blurParams.luminanceThresholdEnabled)
+            {
+                [shaderString appendString:@"srcSample *= step(u_luminanceThreshold, dot(srcSample.rgb, luminanceWeighting));\n"];
+            }
+            [shaderString appendFormat:@"sum += srcSample * %f;\n", optimizedWeight];
         }
     }
     
@@ -325,27 +360,34 @@
 {
     NSArray *functions = [CCEffectBlurImplMetal buildFragmentFunctionsWithBlurParams:blurParams];
     NSArray *temporaries = @[[CCEffectFunctionTemporary temporaryWithType:@"half4" name:@"tmp" initializer:CCEffectInitFragColor]];
-    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[1] outputName:@"blurredResult" inputs:@{@"cc_FragIn" : @"cc_FragIn",
+    NSArray *calls = @[[[CCEffectFunctionCall alloc] initWithFunction:functions[0] outputName:@"blurredResult" inputs:@{@"cc_FragIn" : @"cc_FragIn",
                                                                                                                         @"cc_PreviousPassTexture" : @"cc_PreviousPassTexture",
                                                                                                                         @"cc_PreviousPassTextureSampler" : @"cc_PreviousPassTextureSampler",
                                                                                                                         @"cc_FragTexCoordDimensions" : @"cc_FragTexCoordDimensions",
                                                                                                                         @"blurDirection" : @"blurDirection",
-                                                                                                                        @"inputValue" : @"tmp"
+                                                                                                                        @"inputValue" : @"tmp",
+                                                                                                                        @"luminanceThreshold" : @"luminanceThreshold"
                                                                                                                         }]];
     
     
-    NSArray *arguments = @[
-                           [[CCEffectShaderArgument alloc] initWithType:@"const CCEffectBlurFragData" name:CCShaderArgumentFragIn qualifier:CCEffectShaderArgumentStageIn],
-                           [[CCEffectShaderArgument alloc] initWithType:@"texture2d<half>" name:CCShaderUniformPreviousPassTexture qualifier:CCEffectShaderArgumentTexture],
-                           [[CCEffectShaderArgument alloc] initWithType:@"sampler" name:CCShaderUniformPreviousPassTextureSampler qualifier:CCEffectShaderArgumentSampler],
-                           [[CCEffectShaderArgument alloc] initWithType:@"const device CCEffectTexCoordDimensions*" name:CCShaderArgumentTexCoordDimensions qualifier:CCEffectShaderArgumentBuffer],
-                           [[CCEffectShaderArgument alloc] initWithType:@"const device float2&" name:@"blurDirection" qualifier:CCEffectShaderArgumentBuffer]
-                           ];
+    NSMutableArray *arguments =
+        [NSMutableArray arrayWithArray:@[
+                                         [[CCEffectShaderArgument alloc] initWithType:@"const CCEffectBlurFragData" name:CCShaderArgumentFragIn qualifier:CCEffectShaderArgumentStageIn],
+                                         [[CCEffectShaderArgument alloc] initWithType:@"texture2d<half>" name:CCShaderUniformPreviousPassTexture qualifier:CCEffectShaderArgumentTexture],
+                                         [[CCEffectShaderArgument alloc] initWithType:@"sampler" name:CCShaderUniformPreviousPassTextureSampler qualifier:CCEffectShaderArgumentSampler],
+                                         [[CCEffectShaderArgument alloc] initWithType:@"const device CCEffectTexCoordDimensions*" name:CCShaderArgumentTexCoordDimensions qualifier:CCEffectShaderArgumentBuffer],
+                                         [[CCEffectShaderArgument alloc] initWithType:@"const device float2&" name:@"blurDirection" qualifier:CCEffectShaderArgumentBuffer]
+                                         ]];
     
+    if (blurParams.luminanceThresholdEnabled)
+    {
+        [arguments addObject:[[CCEffectShaderArgument alloc] initWithType:@"const device float&" name:@"luminanceThreshold" qualifier:CCEffectShaderArgumentBuffer]];
+    }
+
     NSArray *structs = [CCEffectBlurImplMetal buildStructDeclarationsWithBlurParams:blurParams];
 
     return [[CCEffectShaderBuilderMetal alloc] initWithType:CCEffectShaderBuilderFragment
-                                                  functions:functions
+                                                  functions:[[CCEffectShaderBuilderMetal defaultFragmentFunctions] arrayByAddingObjectsFromArray:functions]
                                                       calls:calls
                                                 temporaries:temporaries
                                                   arguments:arguments
@@ -354,22 +396,6 @@
 
 + (NSArray *)buildFragmentFunctionsWithBlurParams:(CCEffectBlurParams)blurParams
 {
-    NSArray *sampleWithBoundsInputs = @[
-                                        [[CCEffectFunctionInput alloc] initWithType:@"float2" name:@"texCoord"],
-                                        [[CCEffectFunctionInput alloc] initWithType:@"float2" name:@"texCoordCenter"],
-                                        [[CCEffectFunctionInput alloc] initWithType:@"float2" name:@"texCoordExtents"],
-                                        [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:@"inputTexture"],
-                                        [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:@"inputSampler"]
-                                        ];
-    NSString *sampleWithBoundsBody = CC_GLSL(
-                                             float2 compare = texCoordExtents - abs(texCoord - texCoordCenter);
-                                             float inBounds = step(0.0, min(compare.x, compare.y));
-                                             return inputTexture.sample(inputSampler, texCoord) * inBounds;
-                                             );
-    CCEffectFunction* sampleWithBoundsFunction = [[CCEffectFunction alloc] initWithName:@"sampleWithBounds" body:sampleWithBoundsBody inputs:sampleWithBoundsInputs returnType:@"half4"];
-
-    
-    
     GLfloat* standardGaussianWeights = CCEffectUtilsComputeGaussianWeightsWithBlurParams(blurParams);
     
     NSMutableString *shaderString = [[NSMutableString alloc] init];
@@ -377,15 +403,42 @@
     // Header
     [shaderString appendFormat:@"\
      half4 sum = half4(0);\n\
+     float2 blurCoords;\n\
+     half4 srcSample;\n\
      "];
     
-    // Inner texture loop
-    [shaderString appendFormat:@"sum += sampleWithBounds(cc_FragIn.texCoord1, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler) * %f;\n", standardGaussianWeights[0]];
+    if (blurParams.luminanceThresholdEnabled)
+    {
+        [shaderString appendString:@"const half3 luminanceWeighting = half3(0.2125, 0.7154, 0.0721);\n"];
+    }
     
+    // Inner texture loop
+    [shaderString appendFormat:@"blurCoords = cc_FragIn.texCoord1;\n"];
+    [shaderString appendFormat:@"srcSample = CCEffectSampleWithBounds(blurCoords, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler);\n"];
+    if (blurParams.luminanceThresholdEnabled)
+    {
+        [shaderString appendString:@"srcSample *= step(luminanceThreshold, (float) dot(srcSample.rgb, luminanceWeighting));\n"];
+    }
+    [shaderString appendFormat:@"sum += srcSample * %f;\n", standardGaussianWeights[0]];
+
     for (NSUInteger currentBlurCoordinateIndex = 0; currentBlurCoordinateIndex < blurParams.numberOfOptimizedOffsets; currentBlurCoordinateIndex++)
     {
-        [shaderString appendFormat:@"sum += sampleWithBounds(cc_FragIn.blurCoordinates%lu, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler) * %f;\n", (unsigned long)((currentBlurCoordinateIndex * 2) + 1), standardGaussianWeights[currentBlurCoordinateIndex+1]];
-        [shaderString appendFormat:@"sum += sampleWithBounds(cc_FragIn.blurCoordinates%lu, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler) * %f;\n", (unsigned long)((currentBlurCoordinateIndex * 2) + 2), standardGaussianWeights[currentBlurCoordinateIndex+1]];
+        [shaderString appendFormat:@"blurCoords = cc_FragIn.blurCoordinates%lu;\n", (unsigned long)((currentBlurCoordinateIndex * 2) + 1)];
+        [shaderString appendFormat:@"srcSample = CCEffectSampleWithBounds(blurCoords, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler);\n"];
+        if (blurParams.luminanceThresholdEnabled)
+        {
+            [shaderString appendString:@"srcSample *= step(luminanceThreshold, (float) dot(srcSample.rgb, luminanceWeighting));\n"];
+        }
+        [shaderString appendFormat:@"sum += srcSample * %f;\n", standardGaussianWeights[currentBlurCoordinateIndex+1]];
+
+        
+        [shaderString appendFormat:@"blurCoords = cc_FragIn.blurCoordinates%lu;\n", (unsigned long)((currentBlurCoordinateIndex * 2) + 2)];
+        [shaderString appendFormat:@"srcSample = CCEffectSampleWithBounds(blurCoords, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler);\n"];
+        if (blurParams.luminanceThresholdEnabled)
+        {
+            [shaderString appendString:@"srcSample *= step(luminanceThreshold, (float) dot(srcSample.rgb, luminanceWeighting));\n"];
+        }
+        [shaderString appendFormat:@"sum += srcSample * %f;\n", standardGaussianWeights[currentBlurCoordinateIndex+1]];
     }
     
     // If the number of required samples exceeds the amount we can pass in via varyings, we have to do dependent texture reads in the fragment shader
@@ -395,8 +448,22 @@
         
         for (NSUInteger currentOverlowTextureRead = blurParams.numberOfOptimizedOffsets; currentOverlowTextureRead < blurParams.trueNumberOfOptimizedOffsets; currentOverlowTextureRead++)
         {
-            [shaderString appendFormat:@"sum += sampleWithBounds(cc_FragIn.texCoord1 + singleStepOffset * %f, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler) * %f;\n", (float)(currentOverlowTextureRead+1), standardGaussianWeights[currentOverlowTextureRead+1]];
-            [shaderString appendFormat:@"sum += sampleWithBounds(cc_FragIn.texCoord1 + singleStepOffset * %f, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler) * %f;\n", -((float)(currentOverlowTextureRead+1)), standardGaussianWeights[currentOverlowTextureRead+1]];
+            [shaderString appendFormat:@"blurCoords = cc_FragIn.texCoord1 + singleStepOffset * %f;\n", (float)(currentOverlowTextureRead+1)];
+            [shaderString appendFormat:@"srcSample = CCEffectSampleWithBounds(blurCoords, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler);\n"];
+            if (blurParams.luminanceThresholdEnabled)
+            {
+                [shaderString appendString:@"srcSample *= step(luminanceThreshold, (float) dot(srcSample.rgb, luminanceWeighting));\n"];
+            }
+            [shaderString appendFormat:@"sum += srcSample * %f;\n", standardGaussianWeights[currentOverlowTextureRead+1]];
+
+            
+            [shaderString appendFormat:@"blurCoords = cc_FragIn.texCoord1 + singleStepOffset * %f;\n", -((float)(currentOverlowTextureRead+1))];
+            [shaderString appendFormat:@"srcSample = CCEffectSampleWithBounds(blurCoords, cc_FragTexCoordDimensions->texCoord1Center, cc_FragTexCoordDimensions->texCoord1Extents, cc_PreviousPassTexture, cc_PreviousPassTextureSampler);\n"];
+            if (blurParams.luminanceThresholdEnabled)
+            {
+                [shaderString appendString:@"srcSample *= step(luminanceThreshold, (float) dot(srcSample.rgb, luminanceWeighting));\n"];
+            }
+            [shaderString appendFormat:@"sum += srcSample * %f;\n", standardGaussianWeights[currentOverlowTextureRead+1]];
         }
     }
     
@@ -406,17 +473,22 @@
     free(standardGaussianWeights);
     
     
-    NSArray *inputs = @[
-                        [[CCEffectFunctionInput alloc] initWithType:@"const CCEffectBlurFragData" name:CCShaderArgumentFragIn],
-                        [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:CCShaderUniformPreviousPassTexture],
-                        [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:CCShaderUniformPreviousPassTextureSampler],
-                        [[CCEffectFunctionInput alloc] initWithType:@"const device CCEffectTexCoordDimensions*" name:CCShaderArgumentTexCoordDimensions],
-                        [[CCEffectFunctionInput alloc] initWithType:@"const device float2&" name:@"blurDirection"],
-                        [[CCEffectFunctionInput alloc] initWithType:@"half4" name:@"inputValue"]
-                        ];
+    NSMutableArray *inputs =
+        [NSMutableArray arrayWithArray:@[
+                                         [[CCEffectFunctionInput alloc] initWithType:@"const CCEffectBlurFragData" name:CCShaderArgumentFragIn],
+                                         [[CCEffectFunctionInput alloc] initWithType:@"texture2d<half>" name:CCShaderUniformPreviousPassTexture],
+                                         [[CCEffectFunctionInput alloc] initWithType:@"sampler" name:CCShaderUniformPreviousPassTextureSampler],
+                                         [[CCEffectFunctionInput alloc] initWithType:@"const device CCEffectTexCoordDimensions*" name:CCShaderArgumentTexCoordDimensions],
+                                         [[CCEffectFunctionInput alloc] initWithType:@"const device float2&" name:@"blurDirection"],
+                                         [[CCEffectFunctionInput alloc] initWithType:@"half4" name:@"inputValue"]
+                                         ]];
     
-    CCEffectFunction *blurEffectFunction = [[CCEffectFunction alloc] initWithName:@"blurEffect" body:shaderString inputs:inputs returnType:@"half4"];
-    return @[sampleWithBoundsFunction, blurEffectFunction];
+    if (blurParams.luminanceThresholdEnabled)
+    {
+        [inputs addObject:[[CCEffectFunctionInput alloc] initWithType:@"float" name:@"luminanceThreshold"]];
+    }
+    
+    return @[[[CCEffectFunction alloc] initWithName:@"blurEffect" body:shaderString inputs:inputs returnType:@"half4"]];
 }
 
 + (CCEffectShaderBuilder *)vertexShaderBuilderWithBlurParams:(CCEffectBlurParams)blurParams
