@@ -91,7 +91,7 @@
                           [[CCEffectShader alloc] initWithVertexShaderBuilder:[CCEffectShaderBuilderGL defaultVertexShaderBuilder] fragmentShaderBuilder:fragShaderBuilder]
                           ];
     
-    if((self = [super initWithRenderPasses:renderPasses shaders:[[CCEffectBlurImplGL buildShadersWithBlurParams:blurParams] arrayByAddingObjectsFromArray:shaders]]))
+    if((self = [super initWithRenderPassDescriptors:renderPasses shaders:[[CCEffectBlurImplGL buildShadersWithBlurParams:blurParams] arrayByAddingObjectsFromArray:shaders]]))
     {
         self.interface = interface;
         self.debugName = @"CCEffectDropShadowImplGL";
@@ -125,11 +125,11 @@
     
     __weak CCEffectDropShadow *weakInterface = interface;
 
-    CCEffectRenderPass *pass0 = [[CCEffectRenderPass alloc] init];
+    CCEffectRenderPassDescriptor *pass0 = [CCEffectRenderPassDescriptor descriptor];
     pass0.debugLabel = @"CCEffectDropShadow pass 0";
     pass0.shaderIndex = 0;
     pass0.blendMode = [CCBlendMode premultipliedAlphaMode];
-    pass0.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+    pass0.beginBlocks = @[[[CCEffectBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
 
         passInputs.shaderUniforms[CCShaderUniformMainTexture] = passInputs.previousPassTexture;
         passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
@@ -143,11 +143,11 @@
     }]];
 
     
-    CCEffectRenderPass *pass1 = [[CCEffectRenderPass alloc] init];
+    CCEffectRenderPassDescriptor *pass1 = [CCEffectRenderPassDescriptor descriptor];
     pass1.debugLabel = @"CCEffectDropShadow pass 1";
     pass1.shaderIndex = 0;
     pass1.blendMode = [CCBlendMode premultipliedAlphaMode];
-    pass1.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+    pass1.beginBlocks = @[[[CCEffectBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
 
         passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
         
@@ -159,11 +159,11 @@
         
     }]];
     
-    CCEffectRenderPass *pass3 = [[CCEffectRenderPass alloc] init];
+    CCEffectRenderPassDescriptor *pass3 = [CCEffectRenderPassDescriptor descriptor];
     pass3.debugLabel = @"CCEffectDropShadow pass 3";
     pass3.shaderIndex = 1;
     pass3.blendMode = [CCBlendMode premultipliedAlphaMode];
-    pass3.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+    pass3.beginBlocks = @[[[CCEffectBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
         
         CGPoint offset = weakInterface.shadowOffset;
         offset.x /= passInputs.previousPassTexture.contentSize.width;
@@ -205,7 +205,7 @@ typedef struct CCEffectDropShadowParameters
     NSArray *renderPasses = [CCEffectDropShadowImplMetal buildRenderPassesWithInterface:interface];
     NSArray *shaders = [CCEffectDropShadowImplMetal buildShaders];
     
-    if((self = [super initWithRenderPasses:renderPasses shaders:[[CCEffectBlurImplMetal buildShadersWithBlurParams:blurParams] arrayByAddingObjectsFromArray:shaders]]))
+    if((self = [super initWithRenderPassDescriptors:renderPasses shaders:[[CCEffectBlurImplMetal buildShadersWithBlurParams:blurParams] arrayByAddingObjectsFromArray:shaders]]))
     {
         self.interface = interface;
         self.debugName = @"CCEffectDropShadowImplMetal";
@@ -289,13 +289,13 @@ typedef struct CCEffectDropShadowParameters
     // pass 1: blurs (vertical) texture[1] and outputs to texture[2]
     
     __weak CCEffectDropShadow *weakInterface = interface;
-    
-    CCEffectRenderPass *pass0 = [[CCEffectRenderPass alloc] init];
+
+    CCEffectRenderPassDescriptor *pass0 = [CCEffectRenderPassDescriptor descriptor];
     pass0.debugLabel = @"CCEffectDropShadow pass 0";
     pass0.shaderIndex = 0;
     pass0.blendMode = [CCBlendMode premultipliedAlphaMode];
-    pass0.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
-        
+    pass0.beginBlocks = @[[[CCEffectBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+
         passInputs.shaderUniforms[CCShaderUniformMainTexture] = passInputs.previousPassTexture;
         passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
         
@@ -311,12 +311,12 @@ typedef struct CCEffectDropShadowParameters
     }]];
     
     
-    CCEffectRenderPass *pass1 = [[CCEffectRenderPass alloc] init];
+    CCEffectRenderPassDescriptor *pass1 = [CCEffectRenderPassDescriptor descriptor];
     pass1.debugLabel = @"CCEffectDropShadow pass 1";
     pass1.shaderIndex = 0;
     pass1.blendMode = [CCBlendMode premultipliedAlphaMode];
-    pass1.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
-        
+    pass1.beginBlocks = @[[[CCEffectBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+
         passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
         
         CCEffectTexCoordDimensions tcDims;
@@ -331,12 +331,12 @@ typedef struct CCEffectDropShadowParameters
         
     }]];
     
-    CCEffectRenderPass *pass3 = [[CCEffectRenderPass alloc] init];
+    CCEffectRenderPassDescriptor *pass3 = [CCEffectRenderPassDescriptor descriptor];
     pass3.debugLabel = @"CCEffectDropShadow pass 3";
     pass3.shaderIndex = 1;
     pass3.blendMode = [CCBlendMode premultipliedAlphaMode];
-    pass3.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
-                
+    pass3.beginBlocks = @[[[CCEffectBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+        
         passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
         
         CCEffectTexCoordDimensions tcDims;

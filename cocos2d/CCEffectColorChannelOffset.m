@@ -32,7 +32,7 @@
     NSArray *renderPasses = [CCEffectColorChannelOffsetImplGL buildRenderPassesWithInterface:interface];
     NSArray *shaders = [CCEffectColorChannelOffsetImplGL buildShaders];
 
-    if((self = [super initWithRenderPasses:renderPasses shaders:shaders]))
+    if((self = [super initWithRenderPassDescriptors:renderPasses shaders:shaders]))
     {
         self.interface = interface;
         self.debugName = @"CCEffectColorChannelOffsetImplGL";
@@ -102,10 +102,10 @@
 {
     __weak CCEffectColorChannelOffset *weakInterface = interface;
     
-    CCEffectRenderPass *pass0 = [[CCEffectRenderPass alloc] init];
+    CCEffectRenderPassDescriptor *pass0 = [CCEffectRenderPassDescriptor descriptor];
     pass0.debugLabel = @"CCEffectColorChannelOffset pass 0";
     pass0.blendMode = [CCBlendMode premultipliedAlphaMode];
-    pass0.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+    pass0.beginBlocks = @[[[CCEffectBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
         
         passInputs.shaderUniforms[CCShaderUniformMainTexture] = passInputs.previousPassTexture;
         passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
@@ -154,7 +154,7 @@ typedef struct CCEffectColorChannelOffsetParameters
     NSArray *renderPasses = [CCEffectColorChannelOffsetImplMetal buildRenderPassesWithInterface:interface];
     NSArray *shaders = [CCEffectColorChannelOffsetImplMetal buildShaders];
     
-    if((self = [super initWithRenderPasses:renderPasses shaders:shaders]))
+    if((self = [super initWithRenderPassDescriptors:renderPasses shaders:shaders]))
     {
         self.interface = interface;
         self.debugName = @"CCEffectColorChannelOffsetImplMetal";
@@ -239,10 +239,10 @@ typedef struct CCEffectColorChannelOffsetParameters
 {
     __weak CCEffectColorChannelOffset *weakInterface = interface;
     
-    CCEffectRenderPass *pass0 = [[CCEffectRenderPass alloc] init];
+    CCEffectRenderPassDescriptor *pass0 = [CCEffectRenderPassDescriptor descriptor];
     pass0.debugLabel = @"CCEffectColorChannelOffset pass 0";
     pass0.blendMode = [CCBlendMode premultipliedAlphaMode];
-    pass0.beginBlocks = @[[[CCEffectRenderPassBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
+    pass0.beginBlocks = @[[[CCEffectBeginBlockContext alloc] initWithBlock:^(CCEffectRenderPass *pass, CCEffectRenderPassInputs *passInputs){
         
         passInputs.shaderUniforms[CCShaderUniformMainTexture] = passInputs.previousPassTexture;
         passInputs.shaderUniforms[CCShaderUniformPreviousPassTexture] = passInputs.previousPassTexture;
@@ -311,7 +311,32 @@ typedef struct CCEffectColorChannelOffsetParameters
 
 - (CGPoint)redOffsetWithPoint
 {
-    return CGPointMake(_redOffset.x, _redOffset.y);
+    return _redOffset;
+}
+
+- (void)setRedOffsetWithPoint:(CGPoint)offset
+{
+    _redOffset = offset;
+}
+
+- (CGPoint)greenOffsetWithPoint
+{
+    return _greenOffset;;
+}
+
+- (void)setGreenOffsetWithPoint:(CGPoint)offset
+{
+    _greenOffset = offset;
+}
+
+- (CGPoint)blueOffsetWithPoint
+{
+    return _blueOffset;
+}
+
+- (void)setBlueOffsetWithPoint:(CGPoint)offset
+{
+    _blueOffset = offset;
 }
 
 @end

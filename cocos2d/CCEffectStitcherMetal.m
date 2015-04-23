@@ -31,7 +31,7 @@ static NSString * const CCEffectStitcherStructs     = @"CCEffectStitcherStructs"
 @property (nonatomic, assign) NSUInteger shaderStartIndex;
 
 // Outputs
-@property (nonatomic, strong) NSArray *cachedRenderPasses;
+@property (nonatomic, strong) NSArray *cachedRenderPassDescriptors;
 @property (nonatomic, strong) NSArray *cachedShaders;
 
 @end
@@ -52,27 +52,27 @@ static NSString * const CCEffectStitcherStructs     = @"CCEffectStitcherStructs"
         _stitchListIndex = stitchListIndex;
         _shaderStartIndex = shaderStartIndex;
         
-        _cachedRenderPasses = nil;
+        _cachedRenderPassDescriptors = nil;
         _cachedShaders = nil;
     }
     return self;
 }
 
-- (NSArray *)renderPasses
+- (NSArray *)renderPassDescriptors
 {
     // The output render pass and shader arrays are computed lazily when requested.
     // One method computes both of them so we need to make sure everything stays
     // in sync (ie if we don't have one we don't have the other and if one gets
     // created so does the other).
-    if (!_cachedRenderPasses)
+    if (!_cachedRenderPassDescriptors)
     {
         NSAssert(!_cachedShaders, @"The output render pass array is nil but the output shader array is not.");
         [self stitchEffects:self.effects manglePrefix:self.manglePrefix stitchListIndex:self.stitchListIndex shaderStartIndex:self.shaderStartIndex];
         
-        NSAssert(_cachedRenderPasses, @"Failed to create an output render pass array.");
+        NSAssert(_cachedRenderPassDescriptors, @"Failed to create an output render pass array.");
         NSAssert(_cachedShaders, @"Failed to create an output shader array.");
     }
-    return _cachedRenderPasses;
+    return _cachedRenderPassDescriptors;
 }
 
 - (NSArray *)shaders
@@ -83,10 +83,10 @@ static NSString * const CCEffectStitcherStructs     = @"CCEffectStitcherStructs"
     // created so does the other).
     if (!_cachedShaders)
     {
-        NSAssert(!_cachedRenderPasses, @"The output shader array is nil but the output render pass array is not.");
+        NSAssert(!_cachedRenderPassDescriptors, @"The output shader array is nil but the output render pass array is not.");
         [self stitchEffects:self.effects manglePrefix:self.manglePrefix stitchListIndex:self.stitchListIndex shaderStartIndex:self.shaderStartIndex];
         
-        NSAssert(_cachedRenderPasses, @"Failed to create an output render pass array.");
+        NSAssert(_cachedRenderPassDescriptors, @"Failed to create an output render pass array.");
         NSAssert(_cachedShaders, @"Failed to create an output shader array.");
     }
     return _cachedShaders;
@@ -171,22 +171,28 @@ static NSString * const CCEffectStitcherStructs     = @"CCEffectStitcherStructs"
         // so they point to the new shader in the stitched effect and update
         // the uniform translation table.
         
-        NSMutableArray *renderPasses = [[NSMutableArray alloc] init];
+        NSMutableArray *renderPassDescriptors = [[NSMutableArray alloc] init];
         for (CCEffectRenderPass *pass in effect.renderPasses)
         {
-            CCEffectRenderPass *newPass = [pass copy];
-            newPass.shaderIndex += shaderStartIndex;
+            CCEffectRenderPassDescriptor *newDescriptor = [CCEffectRenderPassDescriptor descriptor];
+            newDescriptor.shaderIndex = pass.shaderIndex + shaderStartIndex;
+            newDescriptor.texCoordsMapping = pass.texCoordsMapping;
+            newDescriptor.blendMode = pass.blendMode;
             
             // Update the uniform translation table in the new pass's begin blocks
-            for (CCEffectRenderPassBeginBlockContext *blockContext in newPass.beginBlocks)
+            NSMutableArray *beginBlocks = [[NSMutableArray alloc] init];
+            for (CCEffectBeginBlockContext *blockContext in pass.beginBlocks)
             {
-                blockContext.uniformTranslationTable = allUTTs[pass.effectShader];
+                [beginBlocks addObject:[[CCEffectBeginBlockContext alloc] initWithBlock:blockContext.block uniformTranslationTable:allUTTs[pass.effectShader]]];
             }
+            newDescriptor.beginBlocks = beginBlocks;
+            newDescriptor.updateBlocks = pass.updateBlocks;
+            newDescriptor.debugLabel = pass.debugLabel;
             
-            [renderPasses addObject:newPass];
+            [renderPassDescriptors addObject:newDescriptor];
         }
         
-        _cachedRenderPasses = [renderPasses copy];
+        _cachedRenderPassDescriptors = [renderPassDescriptors copy];
     }
     else
     {
@@ -266,9 +272,10 @@ static NSString * const CCEffectStitcherStructs     = @"CCEffectStitcherStructs"
         _cachedShaders = @[[[CCEffectShader alloc] initWithVertexShaderBuilder:vtxBuilder fragmentShaderBuilder:fragBuilder]];
         
         // Create a new render pass and point it at the stitched shader.
-        CCEffectRenderPass *renderPass = [[CCEffectRenderPass alloc] init];
-        renderPass.debugLabel = [NSString stringWithFormat:@"CCEffectStack_Stitched_%@", prefix];;
-        renderPass.shaderIndex = shaderStartIndex;
+        CCEffectRenderPassDescriptor *newDescriptor = [CCEffectRenderPassDescriptor descriptor];
+        newDescriptor.shaderIndex = shaderStartIndex;
+        newDescriptor.texCoordsMapping = CCEffectTexCoordsMappingDefault;
+        newDescriptor.blendMode = [CCBlendMode premultipliedAlphaMode];
         
         NSMutableArray *beginBlocks = [[NSMutableArray alloc] init];
         NSMutableArray *updateBlocks = [[NSMutableArray alloc] init];
@@ -278,26 +285,22 @@ static NSString * const CCEffectStitcherStructs     = @"CCEffectStitcherStructs"
         {
             for (CCEffectRenderPass *pass in effect.renderPasses)
             {
-                for (CCEffectRenderPassBeginBlockContext *blockContext in pass.beginBlocks)
+                for (CCEffectBeginBlockContext *blockContext in pass.beginBlocks)
                 {
-                    // Copy the context and set the UTT to the new UTT for the corresponding
-                    // shader for this pass.
-                    CCEffectRenderPassBeginBlockContext *newContext = [blockContext copy];
-                    newContext.uniformTranslationTable = allUTTs[pass.effectShader];
-                    
-                    [beginBlocks addObject:newContext];
+                    [beginBlocks addObject:[[CCEffectBeginBlockContext alloc] initWithBlock:blockContext.block uniformTranslationTable:allUTTs[pass.effectShader]]];
                 }
                 
                 // Copy the update blocks. They don't need any adjustment so they can just
                 // be copied outright.
-                [updateBlocks addObjectsFromArray:[pass.updateBlocks copy]];
+                [updateBlocks addObjectsFromArray:pass.updateBlocks];
             }
         }
         
-        renderPass.beginBlocks = beginBlocks;
-        renderPass.updateBlocks = updateBlocks;
+        newDescriptor.beginBlocks = beginBlocks;
+        newDescriptor.updateBlocks = updateBlocks;
+        newDescriptor.debugLabel = [NSString stringWithFormat:@"CCEffectStack_Stitched_%@", prefix];;
         
-        _cachedRenderPasses = @[renderPass];
+        _cachedRenderPassDescriptors = @[newDescriptor];
     }
 }
 
