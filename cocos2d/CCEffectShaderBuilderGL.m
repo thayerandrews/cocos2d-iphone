@@ -52,6 +52,18 @@ static NSString * const fragTemplate =
                      ((type == CCEffectShaderBuilderFragment) && temporary.isValidForFragmentShader),
                      @"The temporary's initializer does not match the shader type.");
         }
+        
+        // Error check the supplied uniforms.
+        for(CCEffectUniform *uniform in uniforms)
+        {
+            NSAssert([uniform isKindOfClass:[CCEffectUniform class]], @"Expected a CCEffectUniform and found something else.");
+        }
+        
+        // Error check the supplied varyings.
+        for(CCEffectVarying *varying in varyings)
+        {
+            NSAssert([varying isKindOfClass:[CCEffectVarying class]], @"Expected a CCEffectVarying and found something else.");
+        }
     }
     return self;
 }

@@ -7,7 +7,7 @@
 //
 
 #import "CCEffectShaderBuilder.h"
-
+#import "CCEffectFunction.h"
 
 @implementation CCEffectShaderBuilder
 
@@ -18,6 +18,18 @@
     
     if((self = [super init]))
     {
+        // Error check the supplied function objects
+        for(CCEffectFunction *function in functions)
+        {
+            NSAssert([function isKindOfClass:[CCEffectFunction class]], @"Expected a CCEffectFunction and found something else.");
+        }
+
+        // Error check the supplied function call objects
+        for(CCEffectFunctionCall *call in calls)
+        {
+            NSAssert([call isKindOfClass:[CCEffectFunctionCall class]], @"Expected a CCEffectFunctionCall and found something else.");
+        }
+        
         _type = type;
         _functions = [functions copy];
         _calls = [calls copy];

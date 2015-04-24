@@ -57,9 +57,9 @@ static NSString * const CCEffectTexCoordDimensionsStruct = @"CCEffectTexCoordDim
         _structs = [structs copy];
 
         // Error check the supplied temporaries
-        for(CCEffectFunctionTemporary *temporary in self.temporaries)
+        for(CCEffectFunctionTemporary *temporary in temporaries)
         {
-            NSAssert([temporary isKindOfClass:[CCEffectFunctionTemporaryMetal class]], @"Supplied temporary is not a GL temporary.");
+            NSAssert([temporary isKindOfClass:[CCEffectFunctionTemporaryMetal class]], @"Supplied temporary is not a Metal temporary.");
             NSAssert(((type == CCEffectShaderBuilderVertex) && temporary.isValidForVertexShader) ||
                      ((type == CCEffectShaderBuilderFragment) && temporary.isValidForFragmentShader),
                      @"The temporary's initializer does not match the shader type.");
@@ -70,8 +70,15 @@ static NSString * const CCEffectTexCoordDimensionsStruct = @"CCEffectTexCoordDim
         memset(&argumentCounts, 0, sizeof(argumentCounts));
         for(CCEffectShaderArgument *argument in arguments)
         {
+            NSAssert([argument isKindOfClass:[CCEffectShaderArgument class]], @"Expected a CCEffectShaderArgument and found something else.");
             NSAssert(argument.qualifier != CCEffectShaderArgumentDstColor, @"The destination color qualifier is currently unsupported.");
             argumentCounts[argument.qualifier]++;
+        }
+
+        // Error check the supplied struct declarations.
+        for(CCEffectShaderStructDeclaration *structDecl in structs)
+        {
+            NSAssert([structDecl isKindOfClass:[CCEffectShaderStructDeclaration class]], @"Expected a CCEffectShaderStructDeclaration and found something else.");
         }
         
         NSAssert(((type == CCEffectShaderBuilderVertex) && (argumentCounts[CCEffectShaderArgumentStageIn] == 0)) ||
