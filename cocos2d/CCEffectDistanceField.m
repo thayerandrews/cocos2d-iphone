@@ -15,6 +15,7 @@
 #import "CCEffect_Private.h"
 #import "CCColor.h"
 #import "CCRenderer.h"
+#import "CCSetup.h"
 #import "CCTexture.h"
 
 
@@ -195,7 +196,14 @@
 {
     if((self = [super init]))
     {
-        self.effectImpl = [[CCEffectDistanceFieldImplGL alloc] initWithInterface:self];
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            NSAssert(0, @"This effect does not have a Metal implementation yet.");
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectDistanceFieldImplGL alloc] initWithInterface:self];
+        }
         self.debugName = @"CCEffectDistanceField";
       
         _glow = YES;

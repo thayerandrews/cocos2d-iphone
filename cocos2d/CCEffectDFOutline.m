@@ -15,6 +15,7 @@
 #import "CCEffect_Private.h"
 #import "CCColor.h"
 #import "CCRenderer.h"
+#import "CCSetup.h"
 #import "CCTexture.h"
 
 
@@ -163,8 +164,15 @@
 -(id)initWithOutlineColor:(CCColor*)outlineColor fillColor:(CCColor*)fillColor outlineWidth:(int)outlineWidth fieldScale:(float)fieldScale distanceField:(CCTexture*)distanceField
 {
     if((self = [super init]))
-    {        
-        self.effectImpl = [[CCEffectDFOutlineImplGL alloc] initWithInterface:self];
+    {
+        if([CCSetup sharedSetup].graphicsAPI == CCGraphicsAPIMetal)
+        {
+            NSAssert(0, @"This effect does not have a Metal implementation yet.");
+        }
+        else
+        {
+            self.effectImpl = [[CCEffectDFOutlineImplGL alloc] initWithInterface:self];
+        }
         self.debugName = @"CCEffectDFOutline";
 
         _fieldScaleFactor = fieldScale; // 32 4096/128 (input distance field size / output df size)

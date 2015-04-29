@@ -56,6 +56,9 @@
     [self.contentNode addChild:dfSprite];
 }
 
+// The distance field effects do not have Metal implementations yet.
+#if !__CC_METAL_SUPPORTED_AND_ENABLED
+
 #pragma mark Distance Fields
 
 #define INNER_GLOW_MAX_WIDTH 6
@@ -290,6 +293,7 @@
 {
     _distanceFieldEffect.outline = !_distanceFieldEffect.outline;
 }
+#endif
 
 -(void)setupStereoTest
 {
