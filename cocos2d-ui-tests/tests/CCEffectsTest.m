@@ -2175,6 +2175,9 @@
     }
 }
 
+// CCClippingNode is not supported yet on Metal.
+#if !__CC_METAL_SUPPORTED_AND_ENABLED
+
 -(void)setupClipWithEffectsTest
 {
     self.subTitle = @"Clipping + Effects Test.";
@@ -2209,6 +2212,8 @@
     [parent addChild:clip];
     [self.contentNode addChild:parent];
 }
+
+#endif
 
 -(void)setupEffectNodeAnchorTest
 {
